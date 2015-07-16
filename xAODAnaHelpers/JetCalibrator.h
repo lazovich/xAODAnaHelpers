@@ -8,8 +8,10 @@
 
 // external tools include(s):
 #include "JetCalibTools/JetCalibrationTool.h"
-#include "JetSelectorTools/JetCleaningTool.h"
 #include "JetUncertainties/JetUncertaintiesTool.h"
+#include "JetResolution/JERTool.h"
+#include "JetResolution/JERSmearingTool.h"
+#include "JetSelectorTools/JetCleaningTool.h"
 #include "JetMomentTools/JetVertexTaggerTool.h"
 
 // algorithm wrapper
@@ -33,10 +35,17 @@ public:
   std::string m_calibConfigAFII;
   std::string m_calibConfig;
   std::string m_calibSequence;
-  std::string m_jetCalibCutLevel;
+  std::string m_JESUncertConfig;
+  std::string m_JESUncertMCType;
+  bool m_setAFII;
+
+  std::string m_JERUncertConfig;
+  bool m_JERFullSys;
+  bool m_JERApplyNominal;
+
+  std::string m_jetCleanCutLevel;
   bool m_saveAllCleanDecisions;
-  std::string m_uncertConfig;
-  std::string m_uncertMCType;
+  bool m_jetCleanUgly;
   bool m_redoJVT;
   // sort after calibration
   bool    m_sort;
@@ -53,22 +62,30 @@ private:
   bool m_isMC;            //!
   bool m_isFullSim;       //!
 
-  std::string m_jetUncertAlgo;          //!
+  std::string m_JESUncertAlgo;          //!
 
   std::string m_outSCContainerName;     //!
   std::string m_outSCAuxContainerName;  //!
 
   std::vector<CP::SystematicSet> m_systList; //!
+  std::vector<int> m_systType; //!
 
   // tools
   JetCalibrationTool       * m_jetCalibration; //!
+
+  JetUncertaintiesTool     * m_JESUncertTool;      //!
+
+  JERTool                  * m_JERTool;        //!
+  JERSmearingTool          * m_JERSmearTool;   //!
+  ToolHandle<IJERTool>       m_JERToolHandle;  //!
+
+  JetVertexTaggerTool      * m_JVTTool;        //!
+  ToolHandle<IJetUpdateJvt>  m_JVTToolHandle;  //!
+
   JetCleaningTool          * m_jetCleaning;    //!
   std::vector<std::string>  m_decisionNames;    //!
   std::vector< JetCleaningTool* > m_allJetCleaningTools;   //!
 
-  JetUncertaintiesTool     * m_jetUncert;      //!
-  JetVertexTaggerTool      * m_JVTTool;        //!
-  ToolHandle<IJetUpdateJvt>  m_JVTToolHandle;  //!
 
   // variables that don't get filled at submission time should be
   // protected from being send from the submission node to the worker
@@ -94,7 +111,7 @@ public:
 
   // these are the functions not inherited from Algorithm
   virtual EL::StatusCode configure ();
-  
+
 
   // this is needed to distribute the algorithm to the workers
   ClassDef(JetCalibrator, 1);

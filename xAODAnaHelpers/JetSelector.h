@@ -23,6 +23,7 @@ public:
   std::string m_outContainerName;  // output container name
   std::string m_inputAlgo;         // input type - from xAOD or from xAODAnaHelper Algo output
   std::string m_outputAlgo;        // output type - this is how the vector<string> w/ syst names will be saved in TStore
+  std::string m_jetScaleType;    // Type of Scale Momementum
   std::string m_decor;            // The decoration key written to passing objects
   bool m_decorateSelectedObjects; // decorate selected objects? defaul passSel
   bool m_createSelectedContainer; // fill using SG::VIEW_ELEMENTS to be light weight
@@ -86,6 +87,17 @@ private:
   std::vector<std::string> m_passKeys;  //!
   std::vector<std::string> m_failKeys;  //!
 
+  /* object-level cutflow */
+  
+  TH1D* m_jet_cutflowHist_1;  //!
+
+  int   m_jet_cutflow_all;           //! 
+  int   m_jet_cutflow_cleaning_cut;  //!
+  int   m_jet_cutflow_ptmax_cut;     //!
+  int   m_jet_cutflow_ptmin_cut;     //!
+  int   m_jet_cutflow_eta_cut;       //!
+  int   m_jet_cutflow_jvt_cut;       //!
+  int   m_jet_cutflow_btag_cut;      //!
 
   // variables that don't get filled at submission time should be
   // protected from being send from the submission node to the worker

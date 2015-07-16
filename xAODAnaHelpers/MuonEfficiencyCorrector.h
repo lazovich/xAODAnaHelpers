@@ -11,6 +11,7 @@
 // external tools include(s):
 #include "MuonEfficiencyCorrections/MuonEfficiencyScaleFactors.h"
 #include "MuonEfficiencyCorrections/MuonTriggerScaleFactors.h"
+#include "MuonSelectorTools/MuonSelectionTool.h"
 
 // algorithm wrapper
 #include "xAODAnaHelpers/Algorithm.h"
@@ -29,10 +30,9 @@ public:
   std::string   m_DataPeriod;
 
   // Trigger SF                                                                                                                                             
-  int           m_year;
   int           m_runNumber;
-  std::string   m_SingleMuTrig;
-  std::string   m_SinglePlusDiMuTrig;
+  std::string   m_SingleMuTrig;      // this can be either a single muon trigger chain, or an OR of ( 2 single muon chains )
+  std::string   m_DiMuTrig;          // this can be either a dimuon trigger chain, or an OR of ( N single muon trigger chains, dimuon chain ) 
 
   // systematics
   std::string m_inputAlgoSystNames;  // this is the name of the vector of names of the systematically varied containers produced by the
@@ -61,8 +61,9 @@ private:
   std::vector<CP::SystematicSet> m_systListTrig; //!
 
   // tools
-  CP::MuonEfficiencyScaleFactors  *m_MuonEffSFTool;  //!
-  CP::MuonTriggerScaleFactors     *m_MuonTrigSFTool; //!
+  CP::MuonSelectionTool           *m_muonSelectionTool; //!
+  CP::MuonEfficiencyScaleFactors  *m_muonEffSFTool;     //!
+  CP::MuonTriggerScaleFactors     *m_muonTrigSFTool;    //!
 
   // variables that don't get filled at submission time should be
   // protected from being send from the submission node to the worker

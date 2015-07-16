@@ -9,11 +9,16 @@
 #include "TH1D.h"
 
 // external tools include(s):
-#include "ElectronIsolationSelection/IsolationSelectionTool.h"
+#include "IsolationSelection/IsolationSelectionTool.h"
 #include "MuonSelectorTools/MuonSelectionTool.h"
 
 // algorithm wrapper
 #include "xAODAnaHelpers/Algorithm.h"
+
+namespace Trig {
+  class TrigDecisionTool;
+  class TrigMuonMatching;
+}
 
 class MuonSelector : public xAH::Algorithm
 {
@@ -42,16 +47,19 @@ public:
   float          m_d0_max;                   // require d0 < m_d0_max
   float          m_d0sig_max; 	             // require d0 significance (at BL) < m_d0sig_max
   float	         m_z0sintheta_max;           // require z0*sin(theta) (at BL - corrected with vertex info) < m_z0sintheta_max
+  
   // isolation
   bool           m_doIsolation;
   std::string    m_IsoWP;
   std::string    m_CaloIsoEff;
   std::string    m_TrackIsoEff;
-  bool           m_useRelativeIso;
   std::string    m_CaloBasedIsoType;
-  float          m_CaloBasedIsoCut;
   std::string    m_TrackBasedIsoType;
-  float          m_TrackBasedIsoCut;
+  
+  // trigger matching
+  std::string    m_singleMuTrigChains;
+  std::string    m_diMuTrigChains;
+  float          m_minDeltaR;
 
   std::string    m_passAuxDecorKeys;  
   std::string    m_failAuxDecorKeys;  
@@ -68,12 +76,32 @@ private:
   TH1D* m_cutflowHistW;         //!
   int   m_cutflow_bin;          //!
 
+  bool  m_isUsedBefore;     //!
+  
+  // object cutflow
+  TH1D* m_mu_cutflowHist_1;                 //!
+  TH1D* m_mu_cutflowHist_2;                 //!
+    
+  int   m_mu_cutflow_all;		    //! 
+  int   m_mu_cutflow_eta_and_quaility_cut;  //!
+  int   m_mu_cutflow_ptmax_cut;  	    //!
+  int   m_mu_cutflow_ptmin_cut;  	    //!
+  int   m_mu_cutflow_type_cut;		    //! 	  
+  int   m_mu_cutflow_z0sintheta_cut;	    //!       
+  int   m_mu_cutflow_d0_cut;		    //!       
+  int   m_mu_cutflow_d0sig_cut;  	    //!
+  int   m_mu_cutflow_iso_cut;		    //!     
+  
+
   std::vector<std::string> m_passKeys;  //!
   std::vector<std::string> m_failKeys;  //!
 
   // tools
-  CP::IsolationSelectionTool         *m_IsolationSelectionTool;  //! /* MC15 tool for isolation*/
+  CP::IsolationSelectionTool         *m_IsolationSelectionTool;  //! /* Run2 tool for isolation*/
   CP::MuonSelectionTool              *m_muonSelectionTool;       //!
+
+  Trig::TrigDecisionTool*      m_trigDecTool;       //!
+  Trig::TrigMuonMatching*      m_trigMuonMatchTool; //!
 
   // variables that don't get filled at submission time should be
   // protected from being send from the submission node to the worker

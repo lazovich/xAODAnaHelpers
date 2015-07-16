@@ -238,7 +238,7 @@ EL::StatusCode BJetEfficiencyCorrector :: execute ()
 
   // get the collection from TEvent or TStore
   const xAOD::JetContainer* correctedJets(nullptr);
-  RETURN_CHECK("BJetEfficiencyCorrector::execute()", HelperFunctions::retrieve(correctedJets, m_inContainerName, m_event, m_store, m_debug) ,"");
+  RETURN_CHECK("BJetEfficiencyCorrector::execute()", HelperFunctions::retrieve(correctedJets, m_inContainerName, m_event, m_store, m_verbose) ,"");
 
   //
   // loop over available systematics
@@ -299,15 +299,16 @@ EL::StatusCode BJetEfficiencyCorrector :: execute ()
       // obtain efficiency SF
       //
       float SF(0.0);
-      if( fabs(jet_itr->eta()) < 2.5){
-	if( m_BJetEffSFTool->getScaleFactor( *jet_itr, SF ) != CP::CorrectionCode::Ok){
-	  Error( "execute()", "Problem in getEfficiencyScaleFactor");
-	  return EL::StatusCode::FAILURE;
+      if ( fabs(jet_itr->eta()) < 2.5 ) {
+	if ( m_BJetEffSFTool->getScaleFactor( *jet_itr, SF ) != CP::CorrectionCode::Ok ) {
+	  if ( m_debug ) { Warning( "execute()", "Problem in getEfficiencyScaleFactor"); }
+	  SF = -2;
+	  //return EL::StatusCode::FAILURE;
 	}
-      }else{
+      } else {
 	SF = -1;
       }
-      if(m_debug) Info( "execute()", "\t efficiency SF = %g", SF );
+      if ( m_debug ) { Info( "execute()", "\t efficiency SF = %g", SF ); }
 
       //
       // Add it to vector
@@ -319,10 +320,10 @@ EL::StatusCode BJetEfficiencyCorrector :: execute ()
 	// directly obtain reco efficiency
 	//
 	float eff(0.0);
-	if( (fabs(jet_itr->eta()) < 2.5) && 
+	if( (fabs(jet_itr->eta()) < 2.5) &&
 	    m_BJetEffSFTool->getEfficiency( *jet_itr, eff ) != CP::CorrectionCode::Ok){
 	  Error( "execute()", "Problem in getRecoEfficiency");
-	  return EL::StatusCode::FAILURE;
+	  //return EL::StatusCode::FAILURE;
 	}
 	Info( "execute()", "\t reco efficiency = %g", eff );
       }

@@ -193,6 +193,11 @@ EL::StatusCode MuonCalibrator :: initialize ()
     Error("initialize()", "Failed to properly configure. Exiting." );
     return EL::StatusCode::FAILURE;
   }
+  
+  // see if is MC
+  const xAOD::EventInfo* eventInfo(nullptr);
+  RETURN_CHECK("MuonCalibrator::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_debug) ,"");
+  m_isMC = eventInfo->eventType( xAOD::EventInfo::IS_SIMULATION );
 
   m_numEvent      = 0;
   m_numObject     = 0;
@@ -263,9 +268,9 @@ EL::StatusCode MuonCalibrator :: execute ()
 
   // get the collection from TEvent or TStore
   const xAOD::EventInfo* eventInfo(nullptr);
-  RETURN_CHECK("MuonCalibrator::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_debug) ,"");
+  RETURN_CHECK("MuonCalibrator::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_verbose) ,"");
   const xAOD::MuonContainer* inMuons(nullptr);
-  RETURN_CHECK("MuonCalibrator::execute()", HelperFunctions::retrieve(inMuons, m_inContainerName, m_event, m_store, m_debug) ,"");
+  RETURN_CHECK("MuonCalibrator::execute()", HelperFunctions::retrieve(inMuons, m_inContainerName, m_event, m_store, m_verbose) ,"");
 
   // loop over available systematics - remember syst == EMPTY_STRING --> baseline
   // prepare a vector of the names of CDV containers
@@ -304,12 +309,16 @@ EL::StatusCode MuonCalibrator :: execute ()
 
       if ( m_debug ) { Info("execute()", "  uncailbrated muon %i, pt = %.2f GeV", idx, (muSC_itr->pt() * 1e-3)); }
 
-      if ( m_muonCalibrationAndSmearingTool->applyCorrection(*muSC_itr) == CP::CorrectionCode::Error ) {
-        // Can have CorrectionCode values of Ok, OutOfValidityRange, or Error. Here only checking for Error.
-        // If OutOfValidityRange is returned no modification is made and the original muon values are taken.
-        Error("execute()", "MuonCalibrationAndSmearingTool returns Error CorrectionCode");
-      }
+      // calibrate only MC
+      if ( m_isMC ) {
 
+        if ( m_muonCalibrationAndSmearingTool->applyCorrection(*muSC_itr) == CP::CorrectionCode::Error ) {
+          // Can have CorrectionCode values of Ok, OutOfValidityRange, or Error. Here only checking for Error.
+          // If OutOfValidityRange is returned no modification is made and the original muon values are taken.
+          Warning("execute()", "MuonCalibrationAndSmearingTool returns Error CorrectionCode");
+        }
+      }
+      
       if ( m_debug ) { Info("execute()", "  corrected muon pt = %.2f GeV", (muSC_itr->pt() * 1e-3)); }
 
       ++idx;
@@ -324,7 +333,7 @@ EL::StatusCode MuonCalibrator :: execute ()
     }
 
     // save pointers in ConstDataVector with same order
-    RETURN_CHECK( "ElectronCalibrator::execute()", HelperFunctions::makeSubsetCont(calibMuonsSC.first, calibMuonsCDV, "", ToolName::CALIBRATOR), "");
+    RETURN_CHECK( "MuonCalibrator::execute()", HelperFunctions::makeSubsetCont(calibMuonsSC.first, calibMuonsCDV, "", ToolName::CALIBRATOR), "");
 
     // add SC container to TStore
     RETURN_CHECK( "MuonCalibrator::execute()", m_store->record( calibMuonsSC.first,  outSCContainerName  ), "Failed to store container.");
@@ -338,7 +347,7 @@ EL::StatusCode MuonCalibrator :: execute ()
   RETURN_CHECK( "MuonCalibrator::execute()", m_store->record( vecOutContainerNames, m_outputAlgoSystNames), "Failed to record vector of output container names.");
 
   // look what do we have in TStore
-  if ( m_debug ) { m_store->print(); }
+  if ( m_verbose ) { m_store->print(); }
 
   return EL::StatusCode::SUCCESS;
 

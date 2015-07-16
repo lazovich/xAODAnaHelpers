@@ -23,35 +23,26 @@ args = parser.parse_args()
 
 print "using ASG version {0}".format(args.version)
 
-dict_pkg = {'2.1.29': ["ElectronEfficiencyCorrection"],
-            '2.1.30': ["atlasoff/Reconstruction/egamma/egammaMVACalib/tags/egammaMVACalib-01-00-43",
-                       "atlasoff/Control/xAODRootAccess/tags/xAODRootAccess-00-01-04",
-                       "ElectronEfficiencyCorrection"],
-            '2.1.31': ["atlasoff/Reconstruction/egamma/egammaMVACalib/tags/egammaMVACalib-01-00-43",
-                       "atlasoff/Control/xAODRootAccess/tags/xAODRootAccess-00-01-04",
-                       "atlasoff/Reconstruction/Jet/JetCalibTools/tags/JetCalibTools-00-04-37",
-                       "ElectronEfficiencyCorrection"],
-            '2.1.32': ["atlasoff/Reconstruction/Jet/JetCalibTools/tags/JetCalibTools-00-04-37",
-                       "ElectronEfficiencyCorrection"],
-            '2.3.12': ["atlasoff/PhysicsAnalysis/ElectronPhotonID/ElectronEfficiencyCorrection/tags/ElectronEfficiencyCorrection-00-01-20",
-                       "atlasoff/PhysicsAnalysis/MuonID/MuonSelectorTools/tags/MuonSelectorTools-00-05-10",
-                       "atlasoff/PhysicsAnalysis/MuonID/MuonIDAnalysis/MuonEfficiencyCorrections/tags/MuonEfficiencyCorrections-03-00-19",
-                       "atlasoff/PhysicsAnalysis/D3PDTools/EventLoop/tags/EventLoop-00-01-09",
-                       "atlasoff/Reconstruction/MET/METUtilities/tags/METUtilities-00-01-39"],
-            '2.3.13': ["atlasoff/Reconstruction/Jet/JetCalibTools/tags/JetCalibTools-00-04-41",
-                       "atlasoff/PhysicsAnalysis/MuonID/MuonIDAnalysis/MuonEfficiencyCorrections/tags/MuonEfficiencyCorrections-03-00-19",
-                       "atlasoff/PhysicsAnalysis/D3PDTools/EventLoop/tags/EventLoop-00-01-09",
-                       "atlasoff/Reconstruction/MET/METUtilities/tags/METUtilities-00-01-39"],
-            '2.3.14': ["atlasoff/Reconstruction/Jet/JetUncertainties/tags/JetUncertainties-00-09-25",
-                       "atlasoff/Reconstruction/Jet/JetMomentTools/tags/JetMomentTools-00-03-20"],
-            '2.3.15': ["atlasoff/Reconstruction/Jet/JetUncertainties/tags/JetUncertainties-00-09-25",
-                       "atlasoff/Reconstruction/Jet/JetMomentTools/tags/JetMomentTools-00-03-20"]
+dict_pkg = {'2.3.15': ["atlasoff/Reconstruction/Jet/JetUncertainties/tags/JetUncertainties-00-09-27",
+                       "atlasoff/PhysicsAnalysis/JetMissingEtID/JetSelectorTools/tags/JetSelectorTools-00-05-02",
+                       "atlasoff/Reconstruction/Jet/JetMomentTools/tags/JetMomentTools-00-03-20",
+                       "atlasoff/PhysicsAnalysis/AnalysisCommon/PileupReweighting/tags/PileupReweighting-00-03-03",
+                       "atlasoff/PhysicsAnalysis/AnalysisCommon/IsolationSelection/tags/IsolationSelection-00-00-05",
+                       "atlasoff/Event/xAOD/xAODTracking/tags/xAODTracking-00-13-15"],
+            '2.3.18': ["atlasoff/Reconstruction/Jet/JetUncertainties/tags/JetUncertainties-00-09-28",
+                       "atlasoff/Reconstruction/Jet/JetResolution/tags/JetResolution-03-00-36",
+                       "atlasoff/Reconstruction/Jet/JetCalibTools/tags/JetCalibTools-00-04-46",
+                       "atlasoff/Trigger/TrigAnalysis/TrigEgammaMatchingTool/tags/TrigEgammaMatchingTool-00-00-05",
+		                   "atlasoff/PhysicsAnalysis/AnalysisCommon/IsolationSelection/tags/IsolationSelection-00-00-10"],
+            '2.3.19': ["atlasoff/Trigger/TrigAnalysis/TrigEgammaMatchingTool/tags/TrigEgammaMatchingTool-00-00-05",
+		                   "atlasoff/PhysicsAnalysis/AnalysisCommon/IsolationSelection/tags/IsolationSelection-00-00-10",
+                       "atlasoff/Reconstruction/Jet/JetUncertainties/tags/JetUncertainties-00-09-29"]
            }
 
 try:
   packages_to_checkout = dict_pkg[args.version]
 except KeyError:
-  print "That version isn't supported! If this is a problem, tell someone important."
+  print "Warning: that version isn't supported! This may not be a problem if you're using a new ASG release."
   import sys
   sys.exit(0)
 
@@ -59,7 +50,7 @@ for pkg in packages_to_checkout:
   print "checking out package: {0}".format(pkg)
   subprocess.Popen(['cd $ROOTCOREBIN/.. && pwd && rc checkout_pkg {0}'.format(pkg) ], env=rc_env, shell=True).wait()
 
-packages_to_patch = ["ElectronEfficiencyCorrection"]
+packages_to_patch = []
 
 print "applying svn patches..."
 for pkg in packages_to_patch:

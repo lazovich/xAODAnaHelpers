@@ -87,6 +87,7 @@ namespace HelperClasses {
 
   struct MuonInfoSwitch : InfoSwitch {
     bool m_kinematic;
+    bool m_trigger;
     bool m_isolation;
     bool m_quality;
     bool m_trackparams;
@@ -97,6 +98,7 @@ namespace HelperClasses {
 
   struct ElectronInfoSwitch : InfoSwitch {
     bool m_kinematic;
+    bool m_trigger;
     bool m_isolation;
     bool m_PID;
     bool m_trackparams;
@@ -107,9 +109,11 @@ namespace HelperClasses {
 
   struct JetInfoSwitch : InfoSwitch {
     bool m_kinematic;
+    bool m_substructure;
     bool m_rapidity;
     bool m_clean;
     bool m_energy;
+    bool m_scales;
     bool m_resolution;
     bool m_truth;
     bool m_truthDetails;

@@ -8,6 +8,7 @@
 #include "xAODTruth/TruthEventContainer.h"
 #include "xAODJet/JetConstituentVector.h"
 #include "xAODCaloEvent/CaloClusterContainer.h"
+#include "xAODPrimitives/IsolationType.h"
 
 #include "TrigConfxAOD/xAODConfigTool.h"
 #include "TrigDecisionTool/TrigDecisionTool.h"
@@ -25,7 +26,6 @@
 #endif
 
 HelpTreeBase::HelpTreeBase(xAOD::TEvent* event, TTree* tree, TFile* file, const float units, bool debug, bool DC14):
-  m_event(nullptr),
   m_eventInfoSwitch(nullptr),
   m_trigInfoSwitch(nullptr),
   m_muInfoSwitch(nullptr),
@@ -45,6 +45,7 @@ HelpTreeBase::HelpTreeBase(xAOD::TEvent* event, TTree* tree, TFile* file, const 
   m_tree = tree;
   m_tree->SetDirectory( file );
   m_event = event;
+  //m_store = store;
   Info("HelpTreeBase()", "HelpTreeBase setup");
 
 }
@@ -71,6 +72,7 @@ void HelpTreeBase::AddEvent( const std::string detailStr ) {
   m_tree->Branch("mcEventNumber",      &m_mcEventNumber,  "mcEventNumber/I");
   m_tree->Branch("mcChannelNumber",    &m_mcChannelNumber,"mcChannelNumber/I");
   m_tree->Branch("mcEventWeight",      &m_mcEventWeight,  "mcEventWeight/F");
+  m_tree->Branch("weight_pileup",      &m_weight_pileup,  "weight_pileup/F");
 
   if ( m_eventInfoSwitch->m_pileup ) {
     m_tree->Branch("NPV",                &m_npv,            "NPV/I");
@@ -128,11 +130,16 @@ void HelpTreeBase::FillEvent( const xAOD::EventInfo* eventInfo, xAOD::TEvent* ev
     m_mcChannelNumber       = -1;
     m_mcEventWeight	    = 1.;
   }
+  static SG::AuxElement::ConstAccessor< double > weight_pileup ("PileupWeight");
+  if ( weight_pileup.isAvailable( *eventInfo ) ) {
+    m_weight_pileup = weight_pileup( *eventInfo );
+  } else { m_weight_pileup = 1.; }
+
 
   if ( m_eventInfoSwitch->m_pileup ) {
-    if ( event ) {
+    if ( m_event ) {
       const xAOD::VertexContainer* vertices(nullptr);
-      HelperFunctions::retrieve( vertices, "PrimaryVertices", event, 0 );
+      HelperFunctions::retrieve( vertices, "PrimaryVertices", m_event, 0 );
       m_npv = HelperFunctions::countPrimaryVertices(vertices, 2);
     } else {
       m_npv = -1;
@@ -144,27 +151,27 @@ void HelpTreeBase::FillEvent( const xAOD::EventInfo* eventInfo, xAOD::TEvent* ev
 
   }
 
-  if ( m_eventInfoSwitch->m_shapeLC && event ) {
+  if ( m_eventInfoSwitch->m_shapeLC && m_event ) {
     const xAOD::EventShape* evtShape(nullptr);
-    HelperFunctions::retrieve( evtShape, "Kt4EMTopoEventShape", event, 0 );
+    HelperFunctions::retrieve( evtShape, "Kt4EMTopoEventShape", m_event, 0 );
     if ( !evtShape->getDensity( xAOD::EventShape::Density, m_rhoLC ) ) {
       Info("FillEvent()","Could not retrieve xAOD::EventShape::Density from xAOD::EventShape");
       m_rhoLC = -999;
     }
   }
 
-  if ( m_eventInfoSwitch->m_shapeEM && event ) {
+  if ( m_eventInfoSwitch->m_shapeEM && m_event ) {
     const xAOD::EventShape* evtShape(nullptr);
-    HelperFunctions::retrieve( evtShape, "Kt4EMTopoEventShape", event, 0 );
+    HelperFunctions::retrieve( evtShape, "Kt4EMTopoEventShape", m_event, 0 );
     if ( !evtShape->getDensity( xAOD::EventShape::Density, m_rhoEM ) ) {
       Info("FillEvent()","Could not retrieve xAOD::EventShape::Density from xAOD::EventShape");
       m_rhoEM = -999;
     }
   }
 
-  if( m_eventInfoSwitch->m_caloClus && event ) {
+  if( m_eventInfoSwitch->m_caloClus && m_event ) {
     const xAOD::CaloClusterContainer* caloClusters = 0;
-    HelperFunctions::retrieve( caloClusters, "CaloCalTopoClusters", event, 0);
+    HelperFunctions::retrieve( caloClusters, "CaloCalTopoClusters", m_event, 0);
     // save the clusters at the EM scale
     for( auto clus : * caloClusters ) {
       if ( clus->pt ( xAOD::CaloCluster::State::UNCALIBRATED ) < 2000 ) { continue; } // 2 GeV cut
@@ -175,10 +182,10 @@ void HelpTreeBase::FillEvent( const xAOD::EventInfo* eventInfo, xAOD::TEvent* ev
     }
   }
 
-  if( m_eventInfoSwitch->m_truth && event ) {
+  if( m_eventInfoSwitch->m_truth && m_event ) {
     //MC Truth
     const xAOD::TruthEventContainer* truthE = 0;
-    HelperFunctions::retrieve( truthE, "TruthEvents", event, 0 );
+    HelperFunctions::retrieve( truthE, "TruthEvents", m_event, 0 );
     if( truthE ) {
       const xAOD::TruthEvent* truthEvent = truthE->at(0);
       truthEvent->pdfInfoParameter(m_pdgId1,   xAOD::TruthEvent::PDGID1);
@@ -263,7 +270,7 @@ void HelpTreeBase::FillTrigger( const xAOD::EventInfo* eventInfo ) {
   if ( m_trigInfoSwitch->m_basic ) {
 
     if ( m_debug ) { Info("HelpTreeBase::FillTrigger()", "Switch: m_trigInfoSwitch->m_basic"); }
-  
+
     static SG::AuxElement::ConstAccessor< int > passAny("passAny");
     if( passAny.isAvailable( *eventInfo ) ) { m_passAny = passAny( *eventInfo ); }
     else { m_passAny = -999; }
@@ -303,22 +310,22 @@ void HelpTreeBase::FillTrigger( const xAOD::EventInfo* eventInfo ) {
     if( passTrigs.isAvailable( *eventInfo ) ) { m_passTriggers = passTrigs( *eventInfo ); }
 
   }
-
+  
 }
 
 // Clear Trigger
 void HelpTreeBase::ClearTrigger() {
-  
+
   m_passAny = -999;
   m_passL1  = -999;
   m_passHLT = -999;
-  
+
   m_masterKey = 0;
   m_L1PSKey   = 0;
   m_HLTPSKey  = 0;
-  
+
   m_passTriggers.clear();
-  
+
 }
 
 /*********************
@@ -328,7 +335,10 @@ void HelpTreeBase::ClearTrigger() {
  ********************/
 
 /* TODO: jet trigger */
-void HelpTreeBase::AddJetTrigger( const std::string detailStr ) { }
+void HelpTreeBase::AddJetTrigger( const std::string detailStr ) 
+{ 
+  if ( m_debug )  Info("AddJetTrigger()", "Adding jet trigger variables: %s", detailStr.c_str());
+}
 void HelpTreeBase::FillJetTrigger(  ) { }
 void HelpTreeBase::ClearJetTrigger(  ) { }
 
@@ -341,7 +351,7 @@ void HelpTreeBase::ClearJetTrigger(  ) { }
 
 void HelpTreeBase::AddMuons(const std::string detailStr) {
 
-  if(m_debug)  Info("AddMuons()", "Adding muon variables: %s", detailStr.c_str());
+  if ( m_debug )  Info("AddMuons()", "Adding muon variables: %s", detailStr.c_str());
 
   m_muInfoSwitch = new HelperClasses::MuonInfoSwitch( detailStr );
 
@@ -355,8 +365,21 @@ void HelpTreeBase::AddMuons(const std::string detailStr) {
     m_tree->Branch("muon_m",   &m_muon_m);
   }
 
+  if ( m_muInfoSwitch->m_trigger ){
+    m_tree->Branch("muon_isTrigMatched", &m_muon_isTrigMatched);
+  }
+
   if ( m_muInfoSwitch->m_isolation ) {
-    m_tree->Branch("muon_isIsolated",  &m_muon_isIsolated);
+    m_tree->Branch("muon_isIsolated",     &m_muon_isIsolated);
+    m_tree->Branch("muon_ptcone20",	  &m_muon_ptcone20);
+    m_tree->Branch("muon_ptcone30",	  &m_muon_ptcone30);
+    m_tree->Branch("muon_ptcone40",	  &m_muon_ptcone40);
+    m_tree->Branch("muon_ptvarcone20",	  &m_muon_ptvarcone20);
+    m_tree->Branch("muon_ptvarcone30",	  &m_muon_ptvarcone30);
+    m_tree->Branch("muon_ptvarcone40",	  &m_muon_ptvarcone40); 
+    m_tree->Branch("muon_topoetcone20",   &m_muon_topoetcone20);
+    m_tree->Branch("muon_topoetcone30",   &m_muon_topoetcone30);
+    m_tree->Branch("muon_topoetcone40",   &m_muon_topoetcone40);
   }
 
   if ( m_muInfoSwitch->m_quality ) {
@@ -412,9 +435,23 @@ void HelpTreeBase::FillMuons( const xAOD::MuonContainer* muons, const xAOD::Vert
       m_muon_m.push_back  ( muon_itr->m() / m_units  );
     }
 
+    static SG::AuxElement::Accessor<char> isTrigMatchedAcc("isTrigMatched");
+    if ( m_muInfoSwitch->m_trigger ) {
+      if ( isTrigMatchedAcc.isAvailable( *muon_itr ) ) { m_muon_isTrigMatched.push_back( isTrigMatchedAcc( *muon_itr ) ); } else { m_muon_isTrigMatched.push_back( -1 );}
+    }
+
     if ( m_muInfoSwitch->m_isolation ) {
       static SG::AuxElement::Accessor<char> isIsoAcc ("isIsolated");
       if ( isIsoAcc.isAvailable( *muon_itr ) ) { m_muon_isIsolated.push_back( isIsoAcc( *muon_itr ) ); } else { m_muon_isIsolated.push_back( -1 ); }
+      m_muon_ptcone20.push_back( muon_itr->isolation( xAOD::Iso::ptcone20 ) );
+      m_muon_ptcone30.push_back( muon_itr->isolation( xAOD::Iso::ptcone30 ) );
+      m_muon_ptcone40.push_back( muon_itr->isolation( xAOD::Iso::ptcone40 ) );
+      m_muon_ptvarcone20.push_back( muon_itr->isolation( xAOD::Iso::ptvarcone20 ) );
+      m_muon_ptvarcone30.push_back( muon_itr->isolation( xAOD::Iso::ptvarcone30 ) );
+      m_muon_ptvarcone40.push_back( muon_itr->isolation( xAOD::Iso::ptvarcone40 ) );
+      m_muon_topoetcone20.push_back( muon_itr->isolation( xAOD::Iso::topoetcone20 ) );
+      m_muon_topoetcone30.push_back( muon_itr->isolation( xAOD::Iso::topoetcone30 ) );
+      m_muon_topoetcone40.push_back( muon_itr->isolation( xAOD::Iso::topoetcone40 ) );
     }
 
     if ( m_muInfoSwitch->m_quality ) {
@@ -424,9 +461,9 @@ void HelpTreeBase::FillMuons( const xAOD::MuonContainer* muons, const xAOD::Vert
       static SG::AuxElement::Accessor<char> isTightQAcc ("isTightQ");
 
       if ( isVeryLooseQAcc.isAvailable( *muon_itr ) ) { m_muon_isVeryLoose.push_back( isVeryLooseQAcc( *muon_itr ) ); } else { m_muon_isVeryLoose.push_back( -1 ); }
-      if ( isLooseQAcc.isAvailable( *muon_itr ) ) { m_muon_isLoose.push_back( isLooseQAcc( *muon_itr ) ); } else { m_muon_isLoose.push_back( -1 ); }
-      if ( isMediumQAcc.isAvailable( *muon_itr ) ) { m_muon_isMedium.push_back( isMediumQAcc( *muon_itr ) ); } else { m_muon_isMedium.push_back( -1 ); }
-      if ( isTightQAcc.isAvailable( *muon_itr ) ) { m_muon_isTight.push_back( isTightQAcc( *muon_itr ) ); } else { m_muon_isTight.push_back( -1 ); }
+      if ( isLooseQAcc.isAvailable( *muon_itr ) )     { m_muon_isLoose.push_back( isLooseQAcc( *muon_itr ) ); }         else { m_muon_isLoose.push_back( -1 ); }
+      if ( isMediumQAcc.isAvailable( *muon_itr ) )    { m_muon_isMedium.push_back( isMediumQAcc( *muon_itr ) ); }       else { m_muon_isMedium.push_back( -1 ); }
+      if ( isTightQAcc.isAvailable( *muon_itr ) )     { m_muon_isTight.push_back( isTightQAcc( *muon_itr ) ); }         else { m_muon_isTight.push_back( -1 ); }
     }
 
     const xAOD::TrackParticle* trk = muon_itr->primaryTrackParticle();
@@ -441,8 +478,9 @@ void HelpTreeBase::FillMuons( const xAOD::MuonContainer* muons, const xAOD::Vert
 	// The coordinates of this r.f. wrt. the ATLAS system origin are returned by means of vx(), vy(), vz()
 	//
         m_muon_trkd0.push_back( trk->d0() );
-	float d0_significance = fabs( trk->d0() )  / sqrt(trk->definingParametersCovMatrix()(0,0) );
-        m_muon_trkd0sig.push_back( d0_significance );
+        static SG::AuxElement::Accessor<float> d0SigAcc ("d0sig");
+        float d0_significance =  ( d0SigAcc.isAvailable( *muon_itr ) ) ? fabs( d0SigAcc( *muon_itr ) ) : -9999.0;
+	m_muon_trkd0sig.push_back( d0_significance );
 	float z0 =   trk->z0()  - ( primaryVertex->z() - trk->vz() ) ; // distance between z0 and zPV ( after referring the PV z coordinate to the beamspot position, given by vz() )
 								       // see https://twiki.cern.ch/twiki/bin/view/AtlasProtected/InDetTrackingDC14 for further reference
 	float theta = trk->theta();
@@ -511,8 +549,21 @@ void HelpTreeBase::ClearMuons() {
     m_muon_m.clear();
   }
 
+  if ( m_muInfoSwitch->m_trigger ) {
+     m_muon_isTrigMatched.clear();
+  }
+
   if ( m_muInfoSwitch->m_isolation ) {
     m_muon_isIsolated.clear();
+    m_muon_ptcone20.clear();
+    m_muon_ptcone30.clear();
+    m_muon_ptcone40.clear();
+    m_muon_ptvarcone20.clear();
+    m_muon_ptvarcone30.clear();
+    m_muon_ptvarcone40.clear();
+    m_muon_topoetcone20.clear();
+    m_muon_topoetcone30.clear();
+    m_muon_topoetcone40.clear();
   }
 
   if ( m_muInfoSwitch->m_quality ) {
@@ -572,8 +623,25 @@ void HelpTreeBase::AddElectrons(const std::string detailStr) {
     m_tree->Branch("el_m",   &m_el_m);
   }
 
+  if ( m_elInfoSwitch->m_trigger ){
+    // a vector of trigger match decision for each electron trigger chain
+    m_tree->Branch( "el_isTrigMatchedToChain", &m_el_isTrigMatchedToChain );
+    // a vector of strings for each electron trigger chain - 1:1 correspondence w/ vector above
+    m_tree->Branch( "el_listTrigChains", &m_el_listTrigChains );
+  }
+
   if ( m_elInfoSwitch->m_isolation ) {
-    m_tree->Branch("el_isIsolated",  &m_el_isIsolated);
+    m_tree->Branch("el_isIsolated",       &m_el_isIsolated);    
+    m_tree->Branch("el_etcone20",	  &m_el_etcone20);
+    m_tree->Branch("el_ptcone20",	  &m_el_ptcone20);
+    m_tree->Branch("el_ptcone30",	  &m_el_ptcone30);
+    m_tree->Branch("el_ptcone40",	  &m_el_ptcone40);
+    m_tree->Branch("el_ptvarcone20",	  &m_el_ptvarcone20);
+    m_tree->Branch("el_ptvarcone30",	  &m_el_ptvarcone30);
+    m_tree->Branch("el_ptvarcone40",	  &m_el_ptvarcone40); 
+    m_tree->Branch("el_topoetcone20",     &m_el_topoetcone20);
+    m_tree->Branch("el_topoetcone30",     &m_el_topoetcone30);
+    m_tree->Branch("el_topoetcone40",     &m_el_topoetcone40);
   }
 
   if ( m_elInfoSwitch->m_PID ) {
@@ -581,7 +649,6 @@ void HelpTreeBase::AddElectrons(const std::string detailStr) {
     m_tree->Branch("el_LHLoose",      &m_el_LHLoose);
     m_tree->Branch("el_LHMedium",     &m_el_LHMedium);
     m_tree->Branch("el_LHTight",      &m_el_LHTight);
-    m_tree->Branch("el_LHVeryTight",  &m_el_LHVeryTight);
     m_tree->Branch("el_IsEMLoose",    &m_el_IsEMLoose);
     m_tree->Branch("el_IsEMMedium",   &m_el_IsEMMedium);
     m_tree->Branch("el_IsEMTight",    &m_el_IsEMTight);
@@ -636,9 +703,39 @@ void HelpTreeBase::FillElectrons( const xAOD::ElectronContainer* electrons, cons
       m_el_m.push_back  ( (el_itr)->m() / m_units );
     }
 
+    if ( m_elInfoSwitch->m_trigger ) {
+
+      // retrieve map<string,char> w/ chain,isMatched
+      //
+      static SG::AuxElement::Accessor< std::map<std::string,char> > isTrigMatchedMapElAcc("isTrigMatchedMapEl");
+
+      if ( isTrigMatchedMapElAcc.isAvailable( *el_itr ) ) {
+	 // loop over map and fill branches
+	 //
+	 for ( auto const &it : (isTrigMatchedMapElAcc( *el_itr )) ) {
+  	   m_el_isTrigMatchedToChain.push_back( static_cast<int>(it.second) );
+	   m_el_listTrigChains.push_back( it.first );
+	 }
+       } else { 
+	 m_el_isTrigMatchedToChain.push_back( -1 );
+	 m_el_listTrigChains.push_back("NONE"); 
+       }  
+      
+    }
+
     if ( m_elInfoSwitch->m_isolation ) {
       static SG::AuxElement::Accessor<char> isIsoAcc ("isIsolated");
       if ( isIsoAcc.isAvailable( *el_itr ) ) { m_el_isIsolated.push_back( isIsoAcc( *el_itr ) ); } else { m_el_isIsolated.push_back( -1 ); }
+      m_el_etcone20.push_back( el_itr->isolation( xAOD::Iso::etcone20 ) );
+      m_el_ptcone20.push_back( el_itr->isolation( xAOD::Iso::ptcone20 ) );
+      m_el_ptcone30.push_back( el_itr->isolation( xAOD::Iso::ptcone30 ) );
+      m_el_ptcone40.push_back( el_itr->isolation( xAOD::Iso::ptcone40 ) );
+      m_el_ptvarcone20.push_back( el_itr->isolation( xAOD::Iso::ptvarcone20 ) );
+      m_el_ptvarcone30.push_back( el_itr->isolation( xAOD::Iso::ptvarcone30 ) );
+      m_el_ptvarcone40.push_back( el_itr->isolation( xAOD::Iso::ptvarcone40 ) );
+      m_el_topoetcone20.push_back( el_itr->isolation( xAOD::Iso::topoetcone20 ) );
+      m_el_topoetcone30.push_back( el_itr->isolation( xAOD::Iso::topoetcone30 ) );
+      m_el_topoetcone40.push_back( el_itr->isolation( xAOD::Iso::topoetcone40 ) );
     }
 
     if ( m_elInfoSwitch->m_PID ) {
@@ -647,7 +744,6 @@ void HelpTreeBase::FillElectrons( const xAOD::ElectronContainer* electrons, cons
       static SG::AuxElement::Accessor<char> LHLooseAcc ("LHLoose");
       static SG::AuxElement::Accessor<char> LHMediumAcc ("LHMedium");
       static SG::AuxElement::Accessor<char> LHTightAcc ("LHTight");
-      static SG::AuxElement::Accessor<char> LHVeryTightAcc ("LHVeryTight");
 
       static SG::AuxElement::Accessor<char> EMLooseAcc ("Loose");
       static SG::AuxElement::Accessor<char> EMMediumAcc ("Medium");
@@ -657,7 +753,6 @@ void HelpTreeBase::FillElectrons( const xAOD::ElectronContainer* electrons, cons
       if ( LHLooseAcc.isAvailable( *el_itr ) )     { m_el_LHLoose.push_back( LHLooseAcc( *el_itr ) );         } else { m_el_LHLoose.push_back( -1 ); }
       if ( LHMediumAcc.isAvailable( *el_itr ) )    { m_el_LHMedium.push_back( LHMediumAcc( *el_itr ) );       } else { m_el_LHMedium.push_back( -1 ); }
       if ( LHTightAcc.isAvailable( *el_itr ) )     { m_el_LHTight.push_back( LHTightAcc( *el_itr ) );         } else { m_el_LHTight.push_back( -1 ); }
-      if ( LHVeryTightAcc.isAvailable( *el_itr ) ) { m_el_LHVeryTight.push_back( LHVeryTightAcc( *el_itr ) ); } else { m_el_LHVeryTight.push_back( -1 ); }
 
       if ( EMLooseAcc.isAvailable( *el_itr ) )         { m_el_IsEMLoose.push_back( EMLooseAcc( *el_itr ) );   } else { m_el_IsEMLoose.push_back( -1 ); }
       if ( EMMediumAcc.isAvailable( *el_itr ) )        { m_el_IsEMMedium.push_back( EMMediumAcc( *el_itr ) ); } else { m_el_IsEMMedium.push_back( -1 ); }
@@ -674,7 +769,8 @@ void HelpTreeBase::FillElectrons( const xAOD::ElectronContainer* electrons, cons
 	// The coordinates of this r.f. wrt. the ATLAS system origin are returned by means of vx(), vy(), vz()
 	//
         m_el_trkd0.push_back( trk->d0() );
-	float d0_significance = fabs( trk->d0() )  / sqrt(trk->definingParametersCovMatrix()(0,0) );
+        static SG::AuxElement::Accessor<float> d0SigAcc ("d0sig");
+        float d0_significance =  ( d0SigAcc.isAvailable( *el_itr ) ) ? fabs( d0SigAcc( *el_itr ) ) : -9999.0;
         m_el_trkd0sig.push_back( d0_significance );
 	float z0 =  trk->z0()  - ( primaryVertex->z() - trk->vz() ) ; // distance between z0 and zPV ( after referring the PV z coordinate to the beamspot position, given by vz() )
 								      // see https://twiki.cern.ch/twiki/bin/view/AtlasProtected/InDetTrackingDC14 for further reference
@@ -744,8 +840,23 @@ void HelpTreeBase::ClearElectrons() {
     m_el_m.clear();
   }
 
+  if ( m_elInfoSwitch->m_trigger ) {   
+    m_el_isTrigMatchedToChain.clear();
+    m_el_listTrigChains.clear();
+  }
+  
   if ( m_elInfoSwitch->m_isolation ) {
     m_el_isIsolated.clear();
+    m_el_etcone20.clear();
+    m_el_ptcone20.clear();
+    m_el_ptcone30.clear();
+    m_el_ptcone40.clear();
+    m_el_ptvarcone20.clear();
+    m_el_ptvarcone30.clear();
+    m_el_ptvarcone40.clear();
+    m_el_topoetcone20.clear();
+    m_el_topoetcone30.clear();
+    m_el_topoetcone40.clear();
   }
 
   if ( m_elInfoSwitch->m_PID ) {
@@ -753,7 +864,6 @@ void HelpTreeBase::ClearElectrons() {
     m_el_LHLoose.clear();
     m_el_LHMedium.clear();
     m_el_LHTight.clear();
-    m_el_LHVeryTight.clear();
     m_el_IsEMLoose.clear();
     m_el_IsEMMedium.clear();
     m_el_IsEMTight.clear();
@@ -830,10 +940,10 @@ void HelpTreeBase::AddJets(const std::string detailStr)
     m_tree->Branch("jet_LeadingClusterSecondLambda",    &m_jet_LeadingClusterSecondLambda  	  );
     m_tree->Branch("jet_LeadingClusterCenterLambda",    &m_jet_LeadingClusterCenterLambda  	  );
     m_tree->Branch("jet_LeadingClusterSecondR",         &m_jet_LeadingClusterSecondR  	      );
-    m_tree->Branch("jet_clean_VeryLooseBad",            &m_jet_clean_VeryLooseBad             );
-    m_tree->Branch("jet_clean_LooseBad",                &m_jet_clean_LooseBad                 );
-    m_tree->Branch("jet_clean_MediumBad",               &m_jet_clean_MediumBad                );
-    m_tree->Branch("jet_clean_TightBad",                &m_jet_clean_TightBad                 );
+    m_tree->Branch("jet_clean_passLooseBad",            &m_jet_clean_passLooseBad             );
+    m_tree->Branch("jet_clean_passLooseBadUgly",        &m_jet_clean_passLooseBadUgly         );
+    m_tree->Branch("jet_clean_passTightBad",            &m_jet_clean_passTightBad             );
+    m_tree->Branch("jet_clean_passTightBadUgly",        &m_jet_clean_passTightBadUgly         );
   }
 
   if ( m_jetInfoSwitch->m_energy ) {
@@ -845,6 +955,15 @@ void HelpTreeBase::AddJets(const std::string detailStr)
     m_tree->Branch("jet_LowEtConstituentsFrac", &m_jet_lowEtFrac      );
     m_tree->Branch("jet_GhostMuonSegmentCount", &m_jet_muonSegCount   );
     m_tree->Branch("jet_Width",                 &m_jet_width          );
+  }
+
+  if ( m_jetInfoSwitch->m_scales ) {
+    m_tree->Branch("jet_emScalePt",              &m_jet_emPt            );
+    m_tree->Branch("jet_pileupScalePt",          &m_jet_pileupPt        );
+    m_tree->Branch("jet_originConstitScalePt",   &m_jet_originConstitPt );
+    m_tree->Branch("jet_etaJESScalePt",          &m_jet_etaJESPt        );
+    m_tree->Branch("jet_gscScalePt",             &m_jet_gscPt           );
+    m_tree->Branch("jet_insituScalePt",          &m_jet_insituPt        );
   }
 
   if ( m_jetInfoSwitch->m_layer ) {
@@ -859,9 +978,6 @@ void HelpTreeBase::AddJets(const std::string detailStr)
     m_tree->Branch("jet_SumPtTrkPt500",	    &m_jet_SumPtPt500   );
     m_tree->Branch("jet_TrackWidthPt500",   &m_jet_TrkWPt500    );
     m_tree->Branch("jet_JVF",		            &m_jet_jvf	        );
-    //m_tree->Branch("jet_JVFLoose",          &m_jet_jvfloose     );
-    // HigestJVFLooseVtx  Vertex
-    // JVT  Jvt, JvtRpt, JvtJvfcorr float JVT, etc., see Twiki
   }
 
   if ( m_jetInfoSwitch->m_trackPV ) {
@@ -1092,25 +1208,25 @@ void HelpTreeBase::FillJets( const xAOD::JetContainer* jets, int pvLocation ) {
         m_jet_LeadingClusterSecondR.push_back( leadClusSecondR( *jet_itr ) );
       } else { m_jet_LeadingClusterSecondR.push_back( -999 ); }
 
-      static SG::AuxElement::ConstAccessor<char> clean_VeryLooseBad ("clean_VeryLooseBad");
-      if ( clean_VeryLooseBad.isAvailable( *jet_itr ) ) {
-        m_jet_clean_VeryLooseBad.push_back( clean_VeryLooseBad( *jet_itr ) );
-      } else { m_jet_clean_VeryLooseBad.push_back( -999 ); }
+      static SG::AuxElement::ConstAccessor<char> clean_passLooseBad ("clean_passLooseBad");
+      if ( clean_passLooseBad.isAvailable( *jet_itr ) ) {
+        m_jet_clean_passLooseBad.push_back( clean_passLooseBad( *jet_itr ) );
+      } else { m_jet_clean_passLooseBad.push_back( -999 ); }
 
-      static SG::AuxElement::ConstAccessor<char> clean_LooseBad ("clean_LooseBad");
-      if ( clean_LooseBad.isAvailable( *jet_itr ) ) {
-        m_jet_clean_LooseBad.push_back( clean_LooseBad( *jet_itr ) );
-      } else { m_jet_clean_LooseBad.push_back( -999 ); }
+      static SG::AuxElement::ConstAccessor<char> clean_passLooseBadUgly ("clean_passLooseBadUgly");
+      if ( clean_passLooseBadUgly.isAvailable( *jet_itr ) ) {
+        m_jet_clean_passLooseBadUgly.push_back( clean_passLooseBadUgly( *jet_itr ) );
+      } else { m_jet_clean_passLooseBadUgly.push_back( -999 ); }
 
-      static SG::AuxElement::ConstAccessor<char> clean_MediumBad ("clean_MediumBad");
-      if ( clean_MediumBad.isAvailable( *jet_itr ) ) {
-        m_jet_clean_MediumBad.push_back( clean_MediumBad( *jet_itr ) );
-      } else { m_jet_clean_MediumBad.push_back( -999 ); }
+      static SG::AuxElement::ConstAccessor<char> clean_passTightBad ("clean_passTightBad");
+      if ( clean_passTightBad.isAvailable( *jet_itr ) ) {
+        m_jet_clean_passTightBad.push_back( clean_passTightBad( *jet_itr ) );
+      } else { m_jet_clean_passTightBad.push_back( -999 ); }
 
-      static SG::AuxElement::ConstAccessor<char> clean_TightBad ("clean_TightBad");
-      if ( clean_TightBad.isAvailable( *jet_itr ) ) {
-        m_jet_clean_TightBad.push_back( clean_TightBad( *jet_itr ) );
-      } else { m_jet_clean_TightBad.push_back( -999 ); }
+      static SG::AuxElement::ConstAccessor<char> clean_passTightBadUgly ("clean_passTightBadUgly");
+      if ( clean_passTightBadUgly.isAvailable( *jet_itr ) ) {
+        m_jet_clean_passTightBadUgly.push_back( clean_passTightBadUgly( *jet_itr ) );
+      } else { m_jet_clean_passTightBadUgly.push_back( -999 ); }
 
     } // clean
 
@@ -1157,6 +1273,21 @@ void HelpTreeBase::FillJets( const xAOD::JetContainer* jets, int pvLocation ) {
       } else { m_jet_width.push_back( -999 ); }
 
     } // energy
+
+    // each step of the calibration sequence
+    if ( m_jetInfoSwitch->m_scales ) {
+      m_jet_emPt.push_back( jet_itr->getAttribute<xAOD::JetFourMom_t>( "JetEMScaleMomentum" ).Pt() / m_units );
+      m_jet_pileupPt.push_back( jet_itr->getAttribute<xAOD::JetFourMom_t>( "JetPileupScaleMomentum" ).Pt() / m_units );
+      m_jet_originConstitPt.push_back( jet_itr->getAttribute<xAOD::JetFourMom_t>( "JetOriginConstitScaleMomentum" ).Pt() / m_units );
+      m_jet_etaJESPt.push_back( jet_itr->getAttribute<xAOD::JetFourMom_t>( "JetEtaJESScaleMomentum" ).Pt() / m_units );
+      m_jet_gscPt.push_back( jet_itr->getAttribute<xAOD::JetFourMom_t>( "JetGSCScaleMomentum" ).Pt() / m_units );
+      // only available in data
+      xAOD::JetFourMom_t insitu;
+      bool status = jet_itr->getAttribute<xAOD::JetFourMom_t>( "JetInsituScaleMomentum", insitu );
+      if(status) {
+        m_jet_insituPt.push_back( insitu.Pt() / m_units );
+      } else { m_jet_insituPt.push_back( -999 ); }
+    }
 
     if ( m_jetInfoSwitch->m_layer ) {
       static SG::AuxElement::ConstAccessor< std::vector<float> > ePerSamp ("EnergyPerSampling");
@@ -1402,9 +1533,9 @@ void HelpTreeBase::FillJets( const xAOD::JetContainer* jets, int pvLocation ) {
       std::vector<float> e;
       xAOD::JetConstituentVector consVec = jet_itr->getConstituents();
       if( consVec.isValid() ) {
-        // don't use auto since iterator can also set the scale ... 
+        // don't use auto since iterator can also set the scale ...
         // not sure what that does with auto - probably default but just incase
-        // use the example provided in 
+        // use the example provided in
         // http://acode-browser.usatlas.bnl.gov/lxr/source/atlas/Event/xAOD/xAODJet/xAODJet/JetConstituentVector.h
         xAOD::JetConstituentVector::iterator constit = consVec.begin();
         xAOD::JetConstituentVector::iterator constitE = consVec.end();
@@ -1424,13 +1555,13 @@ void HelpTreeBase::FillJets( const xAOD::JetContainer* jets, int pvLocation ) {
     if ( m_jetInfoSwitch->m_flavTag) {
       const xAOD::BTagging * myBTag = jet_itr->btagging();
       if ( !m_DC14 ) {
-      
+
         static SG::AuxElement::ConstAccessor<double> SV0_significance3DAcc ("SV0_significance3D");
         if ( SV0_significance3DAcc.isAvailable(*myBTag) ) { m_jet_sv0.push_back(  myBTag -> SV0_significance3D() ); }
-        
+
 	m_jet_sv1.push_back(     myBTag -> SV1_loglikelihoodratio()   );
         m_jet_ip3d.push_back(    myBTag -> IP3D_loglikelihoodratio()  );
-	
+
       }
       m_jet_sv1ip3d.push_back( myBTag -> SV1plusIP3D_discriminant() );
       m_jet_mv1.push_back(     myBTag -> MV1_discriminant()         );
@@ -1629,22 +1760,26 @@ void HelpTreeBase::FillJets( const xAOD::JetContainer* jets, int pvLocation ) {
 
       // light quark(1,2,3) , gluon (21 or 9), charm(4) and b(5)
       // GhostPartons should select for these pdgIds only
-      static SG::AuxElement::ConstAccessor< std::vector<const xAOD::TruthParticle*> > ghostPartons("GhostPartons");
-      if( ghostPartons.isAvailable( *jet_itr )) {
-        std::vector<const xAOD::TruthParticle*> truthPartons = ghostPartons( *jet_itr );
-        if( truthPartons.size() == 0){
-          m_jet_truth_pdgId.push_back(-999);
-        } else {
-          int iParent = 0;
-          for(unsigned int i=1; i < truthPartons.size(); ++i){
-            if( (truthPartons.at(i)->pt() > 0.001) && (truthPartons.at(i)->e() > truthPartons.at(iParent)->e()) )
-              iParent = i;
-          }
-          m_jet_truth_pdgId.push_back(truthPartons.at(iParent)->pdgId());
-          m_jet_truth_partonPt.push_back(truthPartons.at(iParent)->pt() / m_units);
-          m_jet_truth_partonDR.push_back(truthPartons.at(iParent)->p4().DeltaR( jet_itr->p4() ));
+//    static SG::AuxElement::ConstAccessor< std::vector<const xAOD::TruthParticle*> > ghostPartons("GhostPartons");
+//    if( ghostPartons.isAvailable( *jet_itr )) {
+//    std::vector<const xAOD::TruthParticle*> truthPartons = ghostPartons( *jet_itr );
+      
+      std::vector<const xAOD::TruthParticle*> truthPartons = jet_itr->getAssociatedObjects<xAOD::TruthParticle>("GhostPartons");
+
+      if( truthPartons.size() == 0){
+        m_jet_truth_pdgId.push_back(-999);
+      } else {
+        int iParent = 0;
+        for(unsigned int i=1; i < truthPartons.size(); ++i){
+          if( (truthPartons.at(i)->pt() > 0.001) && (truthPartons.at(i)->e() > truthPartons.at(iParent)->e()) )
+            iParent = i;
         }
+        m_jet_truth_pdgId.push_back(truthPartons.at(iParent)->pdgId());
+        m_jet_truth_partonPt.push_back(truthPartons.at(iParent)->pt() / m_units);
+        m_jet_truth_partonDR.push_back(truthPartons.at(iParent)->p4().DeltaR( jet_itr->p4() ));
       }
+
+//    }
 
     }
 
@@ -1687,10 +1822,10 @@ void HelpTreeBase::ClearJets() {
     m_jet_LeadingClusterSecondLambda.clear();
     m_jet_LeadingClusterCenterLambda.clear();
     m_jet_LeadingClusterSecondR.clear();
-    m_jet_clean_VeryLooseBad.clear();
-    m_jet_clean_LooseBad.clear();
-    m_jet_clean_MediumBad.clear();
-    m_jet_clean_TightBad.clear();
+    m_jet_clean_passLooseBad.clear();
+    m_jet_clean_passLooseBadUgly.clear();
+    m_jet_clean_passTightBad.clear();
+    m_jet_clean_passTightBadUgly.clear();
   }
 
   // energy
@@ -1703,6 +1838,16 @@ void HelpTreeBase::ClearJets() {
     m_jet_lowEtFrac.clear();
     m_jet_muonSegCount.clear();
     m_jet_width.clear();
+  }
+
+  // each step of the calibration sequence
+  if ( m_jetInfoSwitch->m_scales ) {
+    m_jet_emPt.clear();
+    m_jet_pileupPt.clear();
+    m_jet_originConstitPt.clear();
+    m_jet_etaJESPt.clear();
+    m_jet_gscPt.clear();
+    m_jet_insituPt.clear();
   }
 
   // layer
@@ -1845,14 +1990,77 @@ void HelpTreeBase::ClearJets() {
  ********************/
 
 void HelpTreeBase::AddFatJets(std::string detailStr) {
+
+  if(m_debug) Info("AddFatJets()", "Adding fat jet variables: %s", detailStr.c_str());
+
   m_fatJetInfoSwitch = new HelperClasses::JetInfoSwitch( detailStr );
+
+  // always
+  m_tree->Branch("nfatjets",    &m_nfatjet,"nfatjets/I");
+
+  if ( m_fatJetInfoSwitch->m_kinematic ) {
+    m_tree->Branch("fatjet_E",   &m_fatjet_E);
+    m_tree->Branch("fatjet_m",   &m_fatjet_m);
+    m_tree->Branch("fatjet_pt",  &m_fatjet_pt);
+    m_tree->Branch("fatjet_phi", &m_fatjet_phi);
+    m_tree->Branch("fatjet_eta", &m_fatjet_eta);
+  }
+  if ( m_fatJetInfoSwitch->m_substructure ) {
+    m_tree->Branch("fatjet_tau32_wta",   &m_fatjet_tau32_wta);
+  }
+
+  this->AddFatJetsUser();
 }
-/* TODO: fatJets */
-void HelpTreeBase::FillFatJets( const xAOD::JetContainer* /*fatJets*/ ) { }
+
+void HelpTreeBase::FillFatJets( const xAOD::JetContainer* fatJets ) {
+  this->ClearFatJets();
+  this->ClearFatJetsUser();
+
+  for( auto fatjet_itr : *fatJets ) {
+
+    if( m_fatJetInfoSwitch->m_kinematic ){
+      m_fatjet_pt.push_back ( fatjet_itr->pt() / m_units );
+      m_fatjet_m.push_back ( fatjet_itr->m() / m_units );
+      m_fatjet_eta.push_back( fatjet_itr->eta() );
+      m_fatjet_phi.push_back( fatjet_itr->phi() );
+      m_fatjet_E.push_back  ( fatjet_itr->e() / m_units );
+    }
+    if( m_fatJetInfoSwitch->m_substructure ){
+      static SG::AuxElement::ConstAccessor<float> tau2_wta ("Tau2_wta");
+      static SG::AuxElement::ConstAccessor<float> tau3_wta ("Tau3_wta");
+      if ( tau2_wta.isAvailable( *fatjet_itr ) and tau3_wta.isAvailable( *fatjet_itr ) ) {
+        m_fatjet_tau32_wta.push_back( tau3_wta( *fatjet_itr ) / tau2_wta( *fatjet_itr ) );
+      } else { m_fatjet_tau32_wta.push_back( -999 ); }
+
+    }
+    this->FillFatJetsUser(fatjet_itr);
+
+    m_nfatjet++;
+
+  } // loop over fat jets
+
+}
+
+void HelpTreeBase::ClearFatJets() {
+
+  m_nfatjet = 0;
+  if( m_fatJetInfoSwitch->m_kinematic ){
+    m_fatjet_pt.clear();
+    m_fatjet_eta.clear();
+    m_fatjet_phi.clear();
+    m_fatjet_E.clear();
+    m_fatjet_m.clear();
+  }
+  if( m_fatJetInfoSwitch->m_substructure ){
+    m_fatjet_tau32_wta.clear();
+  }
+
+}
 
 void HelpTreeBase::ClearEvent() {
   m_runNumber = m_eventNumber = m_mcEventNumber = m_mcChannelNumber = -999;
   m_mcEventWeight = 1.;
+  m_weight_pileup = 1.;
   // pileup
   m_npv = m_lumiBlock = -999;
   m_actualMu = m_averageMu = -999;
@@ -1866,7 +2074,7 @@ void HelpTreeBase::ClearEvent() {
   m_xf1 = m_xf2 = -999;
 
   //m_scale = m_q = m_pdf1 = m_pdf2 = -999;
-  
+
   // CaloCluster
   if( m_eventInfoSwitch->m_caloClus){
     m_caloCluster_pt.clear();
@@ -1946,7 +2154,7 @@ void HelpTreeBase::ClearTaus() {
 
 /*********************
  *
- *     MET  
+ *     MET
  *
  ********************/
 void HelpTreeBase::AddMET( const std::string detailStr ) {
@@ -1955,9 +2163,11 @@ void HelpTreeBase::AddMET( const std::string detailStr ) {
 
   m_metInfoSwitch = new HelperClasses::METInfoSwitch( detailStr );
 
-  // Add these basic branches
-  m_tree->Branch("metFinal",         &m_metFinal,          "metFinal/F"   );
-  m_tree->Branch("metFinalPhi",      &m_metFinalPhi,       "metFinalPhi/F");
+  m_tree->Branch("metFinal",	     &m_metFinal,	  "metFinal/F");
+  m_tree->Branch("metFinalPx",       &m_metFinalPx,	  "metFinalPx/F");
+  m_tree->Branch("metFinalPy",       &m_metFinalPy,	  "metFinalPy/F");
+  m_tree->Branch("metFinalSumEt",    &m_metFinalSumEt,    "metFinalSumEt/F");
+  m_tree->Branch("metFinalPhi",      &m_metFinalPhi,	  "metFinalPhi/F");  
 
   if ( m_metInfoSwitch->m_refEle ) {
     m_tree->Branch("metEle",         &m_metEle,            "metEle/F"     );
@@ -1980,34 +2190,52 @@ void HelpTreeBase::AddMET( const std::string detailStr ) {
     m_tree->Branch("metSoftClussPhi",&m_metSoftClussPhi,   "metSoftClussPhi/F");
   }
 
-  //this->AddMETUser();
+  this->AddMETUser();
 }
 
-// Fill the information in the trigger branches
 void HelpTreeBase::FillMET( const xAOD::MissingETContainer* met ) {
 
   // Clear previous events
   this->ClearMET();
-  //this->ClearMETUser();
+  this->ClearMETUser();
 
   if ( m_debug ) { Info("HelpTreeBase::FillMET()", "Filling MET info"); }
 
-  const xAOD::MissingET* final = *met->find("FinalClus");
-  m_metFinal    = final->met() / m_units;
-  m_metFinalPhi = final->phi();
+  const xAOD::MissingET* final = *met->find("FinalClus"); // ("FinalClus" uses the calocluster-based soft terms, "FinalTrk" uses the track-based ones)
+  m_metFinal	  = final->met() / m_units;
+  m_metFinalPx    = final->mpx() / m_units;  
+  m_metFinalPy    = final->mpy() / m_units;	
+  m_metFinalSumEt = final->sumet() / m_units;	    
+  m_metFinalPhi   = final->phi();
 
+  /* add stuff... */
+
+  this->FillMETUser(met);
 }
 
-// Clear Trigger
 void HelpTreeBase::ClearMET() {
-  
-   m_metFinal     = m_metFinalPhi     = -999;
-   m_metEle       = m_metElePhi       = -999;
-   m_metGamma     = m_metGammaPhi     = -999;
-   m_metTau       = m_metTauPhi       = -999;
-   m_metMuons     = m_metMuonsPhi     = -999;
-   m_metSoftCluss = m_metSoftClussPhi = -999;
 
+  m_metFinal	  = -999;
+  m_metFinalPx    = -999;
+  m_metFinalPy    = -999;
+  m_metFinalSumEt = -999;
+  m_metFinalPhi   = -999;
+
+  if ( m_metInfoSwitch->m_refEle ) {  
+    m_metEle       = m_metElePhi       = -999;
+  } 
+  if ( m_metInfoSwitch->m_refGamma ) {
+    m_metGamma     = m_metGammaPhi     = -999;
+  }
+  if ( m_metInfoSwitch->m_refTau ) {
+    m_metTau       = m_metTauPhi       = -999;
+  }
+  if ( m_metInfoSwitch->m_muons ) {
+    m_metMuons     = m_metMuonsPhi     = -999;
+  }
+  if ( m_metInfoSwitch->m_softClus) {
+    m_metSoftCluss = m_metSoftClussPhi = -999;
+  }
 }
 
 

@@ -19,17 +19,15 @@
 // EDM include(s):
 #include "xAODEventInfo/EventInfo.h"
 #include "xAODTracking/VertexContainer.h"
-#include "TrigConfxAOD/xAODConfigTool.h"
-#include "TrigDecisionTool/TrigDecisionTool.h"
 #include "xAODCutFlow/CutBookkeeper.h"
 #include "xAODCutFlow/CutBookkeeperContainer.h"
 
 // package include(s):
 #include <xAODAnaHelpers/HelperFunctions.h>
 #include <xAODAnaHelpers/BasicEventSelection.h>
-
 #include <xAODAnaHelpers/tools/ReturnCheck.h>
-
+#include "TrigConfxAOD/xAODConfigTool.h"
+#include "TrigDecisionTool/TrigDecisionTool.h"
 #include "PATInterfaces/CorrectionCode.h"
 
 // ROOT include(s):
@@ -45,11 +43,17 @@ ClassImp(BasicEventSelection)
 BasicEventSelection :: BasicEventSelection () :
   m_grl(nullptr),
   m_pileuptool(nullptr),
+  m_PU_default_channel(0),
   m_trigConfTool(nullptr),
   m_trigDecTool(nullptr),
   m_histEventCount(nullptr),
   m_cutflowHist(nullptr),
-  m_cutflowHistW(nullptr)
+  m_cutflowHistW(nullptr),
+  m_el_cutflowHist_1(nullptr),
+  m_el_cutflowHist_2(nullptr),
+  m_mu_cutflowHist_1(nullptr),
+  m_mu_cutflowHist_2(nullptr),
+  m_jet_cutflowHist_1(nullptr)  
 {
   // Here you put any code for the base initialization of variables,
   // e.g. initialize all pointers to 0.  Note that you should only put
@@ -66,22 +70,34 @@ BasicEventSelection :: BasicEventSelection () :
   // derivation name
   m_derivationName = "";
 
+  // Metadata
+  m_useMetaData = true;
+
   // GRL
-  m_applyGRL = true;
+  m_applyGRLCut = true;
   m_GRLxml = "$ROOTCOREBIN/data/xAODAnaHelpers/data12_8TeV.periodAllYear_DetStatus-v61-pro14-02_DQDefects-00-01-00_PHYS_StandardGRL_All_Good.xml";  //https://twiki.cern.ch/twiki/bin/viewauth/AtlasProtected/GoodRunListsForAnalysis
   m_GRLExcludeList = "";
 
-  // Pileup Reweighting
-  m_doPUreweighting = false;
+  // Clean Powheg huge weight
+  m_cleanPowheg = false;
 
-  // primary vertex
+  // Pileup Reweighting
+  m_doPUreweighting   = false;
+  m_lumiCalcFileNames = "";
+  m_PRWFileNames      = "";
+
+  // Primary Vertex
   m_vertexContainerName = "PrimaryVertices";
+  m_applyPrimaryVertexCut = true;
   // number of tracks to require to count PVs
   m_PVNTrack = 2; // harmonized cut
 
+  // Event Cleaning
+  m_applyEventCleaningCut = true;
+
   // Trigger
   m_triggerSelection = "";
-  m_cutOnTrigger = true ;
+  m_applyTriggerCut = true ;
   m_storeTrigDecisions = false;
   m_storePassAny = false;
   m_storePassL1 = false;
@@ -111,26 +127,33 @@ EL::StatusCode BasicEventSelection :: configure ()
 
     // derivation name
     m_derivationName    = config->GetValue("DerivationName", m_derivationName.c_str() );
+    // temp flag for derivations with broken meta data
+    m_useMetaData       = config->GetValue("UseMetaData", m_useMetaData);
 
     // GRL
-    m_applyGRL          = config->GetValue("ApplyGRL",        m_applyGRL);
+    m_applyGRLCut       = config->GetValue("ApplyGRL",        m_applyGRLCut);
+    m_applyGRLCut       = config->GetValue("ApplyGRLCut",        m_applyGRLCut);
     m_GRLxml            = config->GetValue("GRL", m_GRLxml.c_str());
     m_GRLExcludeList    = config->GetValue("GRLExclude", m_GRLExcludeList.c_str());
 
     // Pileup Reweighting
-    m_doPUreweighting   = config->GetValue("DoPileupReweighting", m_doPUreweighting);
+    m_doPUreweighting    = config->GetValue("DoPileupReweighting", m_doPUreweighting);
+    m_lumiCalcFileNames  = config->GetValue("LumiCalcFiles",       m_lumiCalcFileNames.c_str());
+    m_PRWFileNames       = config->GetValue("PRWFiles",            m_PRWFileNames.c_str());
+    m_PU_default_channel = config->GetValue("PUDefaultChannel",    m_PU_default_channel);
 
-    // primary vertex
-    m_vertexContainerName = config->GetValue("VertexContainer", m_vertexContainerName.c_str());
+    // Event Cleaning
+    m_applyEventCleaningCut      = config->GetValue("ApplyEventCleaningCut",    m_applyEventCleaningCut);
+
+    // Primary Vertex
+    m_vertexContainerName        = config->GetValue("VertexContainer",       m_vertexContainerName.c_str());
+    m_applyPrimaryVertexCut      = config->GetValue("ApplyPrimaryVertexCut", m_applyPrimaryVertexCut);
     // number of tracks to require to count PVs
-    m_PVNTrack            = config->GetValue("NTrackForPrimaryVertex",  m_PVNTrack);
-
-    // temp flag for derivations with broken meta data
-    m_useMetaData           = config->GetValue("UseMetaData", true);
+    m_PVNTrack                   = config->GetValue("NTrackForPrimaryVertex",  m_PVNTrack);
 
     // Trigger
     m_triggerSelection           = config->GetValue("Trigger",            m_triggerSelection.c_str());
-    m_cutOnTrigger               = config->GetValue("CutOnTrigger",       m_cutOnTrigger);
+    m_applyTriggerCut            = config->GetValue("ApplyTriggerCut",    m_applyTriggerCut);
     m_storeTrigDecisions         = config->GetValue("StoreTrigDecision",  m_storeTrigDecisions);
     m_storePassAny               = config->GetValue("StorePassAny",       m_storePassAny);
     m_storePassL1                = config->GetValue("StorePassL1",        m_storePassL1);
@@ -141,16 +164,33 @@ EL::StatusCode BasicEventSelection :: configure ()
     if( m_truthLevelOnly ) {
       Info("configure()", "Truth only! Turn off trigger stuff");
       m_triggerSelection = "";
-      m_cutOnTrigger = m_storeTrigDecisions = m_storePassAny = m_storePassL1 = m_storePassHLT = m_storeTrigKeys = false;
+      m_applyTriggerCut = m_storeTrigDecisions = m_storePassAny = m_storePassL1 = m_storePassHLT = m_storeTrigKeys = false;
+      Info("configure()", "Truth only! Turn off GRL");
+      m_applyGRLCut = false;
+      Info("configure()", "Truth only! Turn off Pile-up Reweight");
+      m_doPUreweighting = false;
     }
 
     if( !m_triggerSelection.empty() )
       Info("configure()", "Using Trigger %s", m_triggerSelection.c_str() );
-    if( !m_cutOnTrigger )
+    if( !m_applyTriggerCut )
       Info("configure()", "WILL NOT CUT ON TRIGGER AS YOU REQUESTED!");
 
+    if( m_doPUreweighting ){
+      if( m_lumiCalcFileNames.size() == 0){
+        Error("BasicEventSelection()", "Pileup Reweighting is requested but no LumiCalc file is specified. Exiting" );
+        return EL::StatusCode::FAILURE;
+      }
+      if( m_PRWFileNames.size() == 0){
+        Error("BasicEventSelection()", "Pileup Reweighting is requested but no PRW file is specified. Exiting" );
+        return EL::StatusCode::FAILURE;
+      }
+    }
+
     config->Print();
+
     Info("configure()", "BasicEventSelection succesfully configured! ");
+
     delete config; config = nullptr;
   }
 
@@ -342,19 +382,25 @@ EL::StatusCode BasicEventSelection :: initialize ()
   Info("initialize()", "Initializing BasicEventSelection... ");
 
   const xAOD::EventInfo* eventInfo(nullptr);
-  RETURN_CHECK("BasicEventSelection::initialize()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_debug) ,"");
+  RETURN_CHECK("BasicEventSelection::initialize()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_verbose) ,"");
 
   m_isMC = eventInfo->eventType( xAOD::EventInfo::IS_SIMULATION );
   if ( m_debug ) { Info("initialize()", "Is MC? %i", static_cast<int>(m_isMC) ); }
 
 
   //Protection in case GRL does not apply to this run
-  if(m_applyGRL){
+  if(m_applyGRLCut){
     std::string runNumString = std::to_string(eventInfo->runNumber());
     if (m_GRLExcludeList.find( runNumString ) != std::string::npos){
       Info("initialize()", "RunNumber is in GRLExclusion list, setting applyGRL to false");
-      m_applyGRL = false;
+      m_applyGRLCut = false;
     }
+  }
+
+  m_cleanPowheg = false;
+  if( eventInfo->runNumber() == 426005 ) { // Powheg+Pythis J5
+    m_cleanPowheg = true;
+    Info("initialize()", "This is J5 Powheg - cleaning that nasty huge weight event");
   }
 
 
@@ -364,6 +410,8 @@ EL::StatusCode BasicEventSelection :: initialize ()
   TFile *fileCF = wk()->getOutputFile ("cutflow");
   fileCF->cd();
 
+  // initialise event cutflow, which will be picked ALSO by the algos downstream where an event selection is applied (or at least can be applied)
+  //
   // use 1,1,2 so Fill(bin) and GetBinContent(bin) refer to the same bin
   m_cutflowHist  = new TH1D("cutflow", "cutflow", 1, 1, 2);
   m_cutflowHist->SetBit(TH1::kCanRebin);
@@ -371,13 +419,27 @@ EL::StatusCode BasicEventSelection :: initialize ()
   m_cutflowHistW = new TH1D("cutflow_weighted", "cutflow_weighted", 1, 1, 2);
   m_cutflowHistW->SetBit(TH1::kCanRebin);
 
-  // label the bins for the cutflow
+  // initialise object cutflows, which will be picked by the object selector algos downstream and filled.
+  //
+  m_el_cutflowHist_1  = new TH1D("cutflow_electrons_1", "cutflow_electrons_1", 1, 1, 2);
+  m_el_cutflowHist_1->SetBit(TH1::kCanRebin);
+  m_el_cutflowHist_2  = new TH1D("cutflow_electrons_2", "cutflow_electrons_2", 1, 1, 2);
+  m_el_cutflowHist_2->SetBit(TH1::kCanRebin);
+  m_mu_cutflowHist_1  = new TH1D("cutflow_muons_1", "cutflow_muons_1", 1, 1, 2);
+  m_mu_cutflowHist_1->SetBit(TH1::kCanRebin);
+  m_mu_cutflowHist_2  = new TH1D("cutflow_muons_2", "cutflow_muons_2", 1, 1, 2);
+  m_mu_cutflowHist_2->SetBit(TH1::kCanRebin); 
+  m_jet_cutflowHist_1  = new TH1D("cutflow_jets_1", "cutflow_jets_1", 1, 1, 2);
+  m_jet_cutflowHist_1->SetBit(TH1::kCanRebin);   
+  
+  // start labelling the bins for the event cutflow
+  //
   m_cutflow_all  = m_cutflowHist->GetXaxis()->FindBin("all");
   m_cutflowHistW->GetXaxis()->FindBin("all");
 
 
   if ( !m_isMC ) {
-    if ( m_applyGRL ) {
+    if ( m_applyGRLCut ) {
       m_cutflow_grl  = m_cutflowHist->GetXaxis()->FindBin("GRL");
       m_cutflowHistW->GetXaxis()->FindBin("GRL");
     }
@@ -390,7 +452,7 @@ EL::StatusCode BasicEventSelection :: initialize ()
   }
   m_cutflow_npv  = m_cutflowHist->GetXaxis()->FindBin("NPV");
   m_cutflowHistW->GetXaxis()->FindBin("NPV");
-  if ( !m_triggerSelection.empty() > 0 && m_cutOnTrigger ) {
+  if ( !m_triggerSelection.empty() > 0 && m_applyTriggerCut ) {
     m_cutflow_trigger  = m_cutflowHist->GetXaxis()->FindBin("Trigger");
     m_cutflowHistW->GetXaxis()->FindBin("Trigger");
   }
@@ -405,27 +467,68 @@ EL::StatusCode BasicEventSelection :: initialize ()
   RETURN_CHECK("BasicEventSelection::initialize()", m_grl->setProperty("PassThrough", false), "");
   RETURN_CHECK("BasicEventSelection::initialize()", m_grl->initialize(), "");
 
-  m_pileuptool = new CP::PileupReweightingTool("Pileup");
-  std::vector<std::string> confFiles;
-  std::vector<std::string> lcalcFiles;
-  //confFiles.push_back("blah"); // pass from config file
-  //lcalcFiles.push_back("blah"); // pass from config file
-  //RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->setProperty("ConfigFiles", confFiles), "");
-  //RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->setProperty("LumiCalcFiles", lcalcFiles), "");
-  RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->initialize(), "");
+  // Pileup RW Tool //
+  if ( m_doPUreweighting ) {
+    m_pileuptool = new CP::PileupReweightingTool("Pileup");
+
+    std::vector<std::string> PRWFiles;
+    std::vector<std::string> lumiCalcFiles;
+
+    std::string tmp_lumiCalcFileNames = m_lumiCalcFileNames;
+    std::string tmp_PRWFileNames = m_PRWFileNames;
+
+    // Parse all comma seperated files
+    while( tmp_PRWFileNames.size() > 0){
+      int pos = tmp_PRWFileNames.find_first_of(',');
+      if( pos == std::string::npos){
+        pos = tmp_PRWFileNames.size();
+        PRWFiles.push_back(tmp_PRWFileNames.substr(0, pos));
+        tmp_PRWFileNames.erase(0, pos);
+      }else{
+        PRWFiles.push_back(tmp_PRWFileNames.substr(0, pos));
+        tmp_PRWFileNames.erase(0, pos+1);
+      }
+    }
+    while( tmp_lumiCalcFileNames.size() > 0){
+      int pos = tmp_lumiCalcFileNames.find_first_of(',');
+      if( pos == std::string::npos){
+        pos = tmp_lumiCalcFileNames.size();
+        lumiCalcFiles.push_back(tmp_lumiCalcFileNames.substr(0, pos));
+        tmp_lumiCalcFileNames.erase(0, pos);
+      }else{
+        lumiCalcFiles.push_back(tmp_lumiCalcFileNames.substr(0, pos));
+        tmp_lumiCalcFileNames.erase(0, pos+1);
+      }
+    }
+
+    std::cout << "PileupReweighting Tool is adding Pileup files:" << std::endl;
+    for( unsigned int i=0; i < PRWFiles.size(); ++i){
+      std::cout << "    " << PRWFiles.at(i) << std::endl;
+    }
+    std::cout << "PileupReweighting Tool is adding Lumi Calc files:" << std::endl;
+    for( unsigned int i=0; i < lumiCalcFiles.size(); ++i){
+      std::cout << "    " << lumiCalcFiles.at(i) << std::endl;
+    }
+
+    RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->setProperty("ConfigFiles", PRWFiles), "");
+    RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->setProperty("LumiCalcFiles", lumiCalcFiles), "");
+    if(m_PU_default_channel)
+      RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->setProperty("DefaultChannel", m_PU_default_channel), "");
+    RETURN_CHECK("BasicEventSelection::initialize()", m_pileuptool->initialize(), "");
+  }
 
 
   // Trigger //
-  m_trigConfTool = new TrigConf::xAODConfigTool( "xAODConfigTool" );
-  RETURN_CHECK("BasicEventSelection::initialize()", m_trigConfTool->initialize(), "");
-  ToolHandle< TrigConf::ITrigConfigTool > configHandle( m_trigConfTool );
+  if( !m_triggerSelection.empty() || m_applyTriggerCut || m_storeTrigDecisions || m_storePassAny || m_storePassL1 || m_storePassHLT || m_storeTrigKeys ) {
+    m_trigConfTool = new TrigConf::xAODConfigTool( "xAODConfigTool" );
+    RETURN_CHECK("BasicEventSelection::initialize()", m_trigConfTool->initialize(), "");
+    ToolHandle< TrigConf::ITrigConfigTool > configHandle( m_trigConfTool );
 
-  if( !m_triggerSelection.empty() || m_cutOnTrigger || m_storeTrigDecisions || m_storePassAny || m_storePassL1 || m_storePassHLT || m_storeTrigKeys ) {
     m_trigDecTool = new Trig::TrigDecisionTool( "TrigDecisionTool" );
     RETURN_CHECK("BasicEventSelection::initialize()", m_trigDecTool->setProperty( "ConfigTool", configHandle ), "");
     RETURN_CHECK("BasicEventSelection::initialize()", m_trigDecTool->setProperty( "TrigDecisionKey", "xTrigDecision" ), "");
     RETURN_CHECK("BasicEventSelection::initialize()", m_trigDecTool->setProperty( "OutputLevel", MSG::ERROR), "");
-    RETURN_CHECK("BasicEventSelection::initialize()", m_trigDecTool->initialize(), "");
+    RETURN_CHECK("BasicEventSelection::initialize()", m_trigDecTool->initialize(), "Failed to initialise TrigDecisionTool!");
   }
 
 
@@ -454,14 +557,14 @@ EL::StatusCode BasicEventSelection :: execute ()
   // Event information
   //---------------------------
   const xAOD::EventInfo* eventInfo(nullptr);
-  RETURN_CHECK("BasicEventSelection::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_debug) ,"");
+  RETURN_CHECK("BasicEventSelection::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_verbose) ,"");
 
   ++m_eventCounter;
 
   //--------------------------
   //Print trigger's used for first event only
   if ( m_eventCounter == 1 && !m_triggerSelection.empty() ) {
-    printf("*** Triggers used are:\n");
+    Info("execute()", "*** Triggers used (in OR) are:\n");
     auto printingTriggerChainGroup = m_trigDecTool->getChainGroup(m_triggerSelection);
     std::vector<std::string> triggersUsed = printingTriggerChainGroup->getListOfTriggers();
     for ( unsigned int iTrigger = 0; iTrigger < triggersUsed.size(); ++iTrigger ) {
@@ -473,19 +576,29 @@ EL::StatusCode BasicEventSelection :: execute ()
 
   float mcEvtWeight(1.0), pileupWeight(1.0);
   if ( m_isMC ) {
-     const std::vector< float > weights = eventInfo->mcEventWeights(); // The weights of all the MC events used in the simulation
-     if ( weights.size() > 0 ) mcEvtWeight = weights[0];
+    const std::vector< float > weights = eventInfo->mcEventWeights(); // The weights of all the MC events used in the simulation
+    if ( weights.size() > 0 ) mcEvtWeight = weights[0];
 
-     //for ( auto& it : weights ) { Info("execute()", "event weight: %2f.", it ); }
+    //for ( auto& it : weights ) { Info("execute()", "event weight: %2f.", it ); }
 
-     if ( m_doPUreweighting ) {
-       m_pileuptool->apply(eventInfo);
-       static SG::AuxElement::ConstAccessor< double > pileupWeightAcc("PileupWeight");
-       pileupWeight = pileupWeightAcc(*eventInfo) ;
-     }
-     mcEvtWeight *= pileupWeight;
+    // kill the powheg event with a huge weight
+    if( m_cleanPowheg ) {
+      if( eventInfo->eventNumber() == 1652845 ) {
+        std::cout << "Dropping huge weight event. Weight should be 352220000" << std::endl;
+        std::cout << "WEIGHT : " << mcEvtWeight << std::endl;
+        wk()->skipEvent();
+        return EL::StatusCode::SUCCESS; // go to next event
+      }
+    }
+
+    if ( m_doPUreweighting ) {
+      m_pileuptool->apply(*eventInfo);
+      static SG::AuxElement::ConstAccessor< double > pileupWeightAcc("PileupWeight");
+      pileupWeight = pileupWeightAcc(*eventInfo) ;
+    }
   }
-  // decorate with pileup corrected mc event weight
+
+  // decorate with mc event weight
   static SG::AuxElement::Decorator< float > mcEvtWeightDecor("mcEventWeight");
   mcEvtWeightDecor(*eventInfo) = mcEvtWeight;
 
@@ -497,7 +610,7 @@ EL::StatusCode BasicEventSelection :: execute ()
     Info("execute()", "Event number = %i", m_eventCounter);
   }
 
-  if ( m_debug && (m_eventCounter % 500) == 0 ) {
+  if ( m_verbose && (m_eventCounter % 500) == 0 ) {
     Info(m_name.c_str(), "Store Content:");
     m_store->print();
     Info(m_name.c_str(), "End Content");
@@ -506,20 +619,20 @@ EL::StatusCode BasicEventSelection :: execute ()
   // if data check if event passes GRL and even cleaning
   if ( !m_isMC ) {
 
-    // if data event in Egamma stream is also in Muons stream, skip it - TO DO
-
-    // Get the streams that the event was put in
-    const std::vector<  xAOD::EventInfo::StreamTag > streams = eventInfo->streamTags();
 
     if ( m_debug ) {
+
+      // Get the streams that the event was put in
+      const std::vector<  xAOD::EventInfo::StreamTag > streams = eventInfo->streamTags();
+
       for ( auto& it : streams ) {
-	const std::string stream_name = it.name();
-	Info("execute()", "event has fired stream: %s", stream_name.c_str() );
+	      const std::string stream_name = it.name();
+	      Info("execute()", "event has fired stream: %s", stream_name.c_str() );
       }
     }
 
     // GRL
-    if ( m_applyGRL ) {
+    if ( m_applyGRLCut ) {
       if ( !m_grl->passRunLB( *eventInfo ) ) {
         wk()->skipEvent();
         return EL::StatusCode::SUCCESS; // go to next event
@@ -533,15 +646,15 @@ EL::StatusCode BasicEventSelection :: execute ()
     // problematic regions of the detector, and incomplete events.
     // Apply to data.
     //------------------------------------------------------------
-    // reject event if:
-    if ( (eventInfo->errorState(xAOD::EventInfo::LAr)==xAOD::EventInfo::Error ) ) {
+
+    if ( m_applyEventCleaningCut && (eventInfo->errorState(xAOD::EventInfo::LAr)==xAOD::EventInfo::Error ) ) {
       wk()->skipEvent();
       return EL::StatusCode::SUCCESS;
     }
     m_cutflowHist ->Fill( m_cutflow_lar, 1 );
     m_cutflowHistW->Fill( m_cutflow_lar, mcEvtWeight);
 
-    if ( (eventInfo->errorState(xAOD::EventInfo::Tile)==xAOD::EventInfo::Error ) ) {
+    if ( m_applyEventCleaningCut && (eventInfo->errorState(xAOD::EventInfo::Tile)==xAOD::EventInfo::Error ) ) {
       wk()->skipEvent();
       return EL::StatusCode::SUCCESS;
     }
@@ -549,20 +662,19 @@ EL::StatusCode BasicEventSelection :: execute ()
     m_cutflowHistW->Fill( m_cutflow_tile, mcEvtWeight);
 
 
-    if( (eventInfo->isEventFlagBitSet(xAOD::EventInfo::Core, 18) ) ) {
+    if( m_applyEventCleaningCut && (eventInfo->isEventFlagBitSet(xAOD::EventInfo::Core, 18) ) ) {
       wk()->skipEvent();
       return EL::StatusCode::SUCCESS;
     }
     m_cutflowHist ->Fill( m_cutflow_core, 1 );
     m_cutflowHistW->Fill( m_cutflow_core, mcEvtWeight);
 
-    // if event in Egamma stream was already in Muons stream, skip it
-
   } //if !m_isMC
 
+  // Primary Vertex
   const xAOD::VertexContainer* vertices(nullptr);
-  if ( !m_truthLevelOnly ) {
-    RETURN_CHECK("BasicEventSelection::execute()", HelperFunctions::retrieve(vertices, m_vertexContainerName, m_event, m_store, m_debug) ,"");
+  if ( !m_truthLevelOnly && m_applyPrimaryVertexCut ) {
+    RETURN_CHECK("BasicEventSelection::execute()", HelperFunctions::retrieve(vertices, m_vertexContainerName, m_event, m_store, m_verbose) ,"");
 
     if ( !HelperFunctions::passPrimaryVertexSelection( vertices, m_PVNTrack ) ) {
       wk()->skipEvent();
@@ -572,10 +684,10 @@ EL::StatusCode BasicEventSelection :: execute ()
   m_cutflowHist ->Fill( m_cutflow_npv, 1 );
   m_cutflowHistW->Fill( m_cutflow_npv, mcEvtWeight);
 
-  // Trigger //
+  // Trigger
   if ( !m_triggerSelection.empty() ) {
     auto triggerChainGroup = m_trigDecTool->getChainGroup(m_triggerSelection);
-    if ( m_cutOnTrigger ) {
+    if ( m_applyTriggerCut ) {
       if ( !triggerChainGroup->isPassed() ) {
         wk()->skipEvent();
         return EL::StatusCode::SUCCESS;
@@ -583,7 +695,7 @@ EL::StatusCode BasicEventSelection :: execute ()
       m_cutflowHist ->Fill( m_cutflow_trigger, 1 );
       m_cutflowHistW->Fill( m_cutflow_trigger, mcEvtWeight);
 
-    } // m_cutOnTrigger
+    } // m_applyTriggerCut
 
     // save passed triggers in eventInfo
     if( m_storeTrigDecisions ) {
@@ -636,9 +748,6 @@ EL::StatusCode BasicEventSelection :: postExecute ()
   // processing.  This is typically very rare, particularly in user
   // code.  It is mainly used in implementing the NTupleSvc.
 
-  // GF TOFIX
-  //m_histEventCount -> Fill(3); // nEvents selected out
-  //m_histEventCount -> Fill(6, m_eventInfoHandler->get_MCEventWeight()); // sumOfWeights selected out
   return EL::StatusCode::SUCCESS;
 }
 

@@ -47,7 +47,8 @@ ClassImp(JetSelector)
 
 JetSelector :: JetSelector () :
   m_cutflowHist(nullptr),
-  m_cutflowHistW(nullptr)
+  m_cutflowHistW(nullptr),
+  m_jet_cutflowHist_1(nullptr)
 {
   // Here you put any code for the base initialization of variables,
   // e.g. initialize all pointers to 0.  Note that you should only put
@@ -63,6 +64,7 @@ JetSelector :: JetSelector () :
 
   // input container to be read from TEvent or TStore
   m_inContainerName         = "";
+  m_jetScaleType            = "";
 
   // name of algo input container comes from - only if running on syst
   m_inputAlgo               = "";
@@ -130,6 +132,15 @@ EL::StatusCode  JetSelector :: configure ()
 
     // input container to be read from TEvent or TStore
     m_inContainerName         = config->GetValue("InputContainer",  m_inContainerName.c_str());
+    m_jetScaleType            = config->GetValue("JetScaleType",  m_jetScaleType.c_str());
+    //If not set, find default from input container name
+    if (m_jetScaleType.size() == 0){
+      if( m_inContainerName.find("EMTopo") != std::string::npos){
+        m_jetScaleType = "JetEMScaleMomentum";
+      }else{
+        m_jetScaleType = "JetConstitScaleMomentum";
+      }
+    }
 
     // name of algo input container comes from - only if running on syst
     m_inputAlgo               = config->GetValue("InputAlgo",   m_inputAlgo.c_str());
@@ -163,16 +174,16 @@ EL::StatusCode  JetSelector :: configure ()
     m_rapidity_min            = config->GetValue("rapidityMin", m_rapidity_min);
     m_truthLabel 	      = config->GetValue("TruthLabel",   m_truthLabel);
 
-    m_doJVF 		              = config->GetValue("DoJVF",       m_doJVF);
-    m_doBTagCut		            = config->GetValue("DoBTagCut",   m_doBTagCut);
-    m_pt_max_JVF 	            = config->GetValue("pTMaxJVF",    m_pt_max_JVF);
-    m_eta_max_JVF 	          = config->GetValue("etaMaxJVF",   m_eta_max_JVF);
-    m_JVFCut 		              = config->GetValue("JVFCut",      m_JVFCut);
+    m_doJVF 		      = config->GetValue("DoJVF",       m_doJVF);
+    m_doBTagCut		      = config->GetValue("DoBTagCut",   m_doBTagCut);
+    m_pt_max_JVF 	      = config->GetValue("pTMaxJVF",    m_pt_max_JVF);
+    m_eta_max_JVF 	      = config->GetValue("etaMaxJVF",   m_eta_max_JVF);
+    m_JVFCut 		      = config->GetValue("JVFCut",      m_JVFCut);
 
-    m_doJVT 		              = config->GetValue("DoJVT",       m_doJVT);
-    m_pt_max_JVT 	            = config->GetValue("pTMaxJVT",    m_pt_max_JVT);
-    m_eta_max_JVT 	          = config->GetValue("etaMaxJVT",   m_eta_max_JVT);
-    m_JVTCut 		              = config->GetValue("JVTCut",      m_JVTCut);
+    m_doJVT 		      = config->GetValue("DoJVT",       m_doJVT);
+    m_pt_max_JVT 	      = config->GetValue("pTMaxJVT",    m_pt_max_JVT);
+    m_eta_max_JVT 	      = config->GetValue("etaMaxJVT",   m_eta_max_JVT);
+    m_JVTCut 		      = config->GetValue("JVTCut",      m_JVTCut);
 
     // Btag quality
     m_btag_veryloose          = config->GetValue("BTagVeryLoose",   m_btag_veryloose);
@@ -247,7 +258,6 @@ EL::StatusCode  JetSelector :: configure ()
   //if ( m_btag_medium    ) { m_btagCut = 0.7892; }
   //if ( m_btag_tight     ) { m_btagCut = 0.9827; }
   //}
-
 
   if ( m_decorateSelectedObjects ) {
     Info(m_name.c_str()," Decorate Jets with %s", m_decor.c_str());
@@ -326,12 +336,32 @@ EL::StatusCode JetSelector :: initialize ()
   // you create here won't be available in the output if you have no
   // input events.
   Info("initialize()", "Calling initialize");
+  
   if ( m_useCutFlow ) {
-    TFile *file = wk()->getOutputFile ("cutflow");
+
+   // retrieve the file in which the cutflow hists are stored
+    //
+    TFile *file     = wk()->getOutputFile ("cutflow");
+    
+    // retrieve the event cutflows
+    //
     m_cutflowHist  = (TH1D*)file->Get("cutflow");
     m_cutflowHistW = (TH1D*)file->Get("cutflow_weighted");
     m_cutflow_bin  = m_cutflowHist->GetXaxis()->FindBin(m_name.c_str());
     m_cutflowHistW->GetXaxis()->FindBin(m_name.c_str());
+    
+    // retrieve the object cutflow
+    //
+    m_jet_cutflowHist_1 = (TH1D*)file->Get("cutflow_jets_1");
+
+    m_jet_cutflow_all             = m_jet_cutflowHist_1->GetXaxis()->FindBin("all");
+    m_jet_cutflow_cleaning_cut    = m_jet_cutflowHist_1->GetXaxis()->FindBin("cleaning_cut");     
+    m_jet_cutflow_ptmax_cut       = m_jet_cutflowHist_1->GetXaxis()->FindBin("ptmax_cut");
+    m_jet_cutflow_ptmin_cut       = m_jet_cutflowHist_1->GetXaxis()->FindBin("ptmin_cut");      
+    m_jet_cutflow_eta_cut         = m_jet_cutflowHist_1->GetXaxis()->FindBin("eta_cut"); 
+    m_jet_cutflow_jvt_cut         = m_jet_cutflowHist_1->GetXaxis()->FindBin("JVT_cut");
+    m_jet_cutflow_btag_cut        = m_jet_cutflowHist_1->GetXaxis()->FindBin("BTag_cut");
+ 
   }
 
   if ( this->configure() == EL::StatusCode::FAILURE ) {
@@ -368,7 +398,7 @@ EL::StatusCode JetSelector :: execute ()
 
   // retrieve event
   const xAOD::EventInfo* eventInfo(nullptr);
-  RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_debug) ,"");
+  RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(eventInfo, m_eventInfoContainerName, m_event, m_store, m_verbose) ,"");
 
   // MC event weight
   float mcEvtWeight(1.0);
@@ -392,7 +422,7 @@ EL::StatusCode JetSelector :: execute ()
   if ( m_inputAlgo.empty() ) {
 
     // this will be the collection processed - no matter what!!
-    RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(inJets, m_inContainerName, m_event, m_store, m_debug) ,"");
+    RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(inJets, m_inContainerName, m_event, m_store, m_verbose) ,"");
 
     pass = executeSelection( inJets, mcEvtWeight, count, m_outContainerName);
 
@@ -401,14 +431,14 @@ EL::StatusCode JetSelector :: execute ()
 
     // get vector of string giving the names
     std::vector<std::string>* systNames(nullptr);
-    RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(systNames, m_inputAlgo, 0, m_store, m_debug) ,"");
+    RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(systNames, m_inputAlgo, 0, m_store, m_verbose) ,"");
 
     // loop over systematics
     std::vector< std::string >* vecOutContainerNames = new std::vector< std::string >;
     bool passOne(false);
     for ( auto systName : *systNames ) {
 
-      RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(inJets, m_inContainerName+systName, m_event, m_store, m_debug) ,"");
+      RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(inJets, m_inContainerName+systName, m_event, m_store, m_verbose) ,"");
 
       passOne = executeSelection( inJets, mcEvtWeight, count, m_outContainerName+systName );
       if ( count ) { count = false; } // only count for 1 collection
@@ -427,7 +457,7 @@ EL::StatusCode JetSelector :: execute ()
   }
 
   // look what do we have in TStore
-  if ( m_debug ) { m_store->print(); }
+  if ( m_verbose ) { m_store->print(); }
 
   if ( !pass ) {
     wk()->skipEvent();
@@ -453,7 +483,7 @@ bool JetSelector :: executeSelection ( const xAOD::JetContainer* inJets,
   // if doing JVF or JVT get PV location
   if ( m_doJVF ) {
     const xAOD::VertexContainer* vertices(nullptr);
-    RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(vertices, "PrimaryVertices", m_event, m_store, m_debug) ,"");
+    RETURN_CHECK("JetSelector::execute()", HelperFunctions::retrieve(vertices, "PrimaryVertices", m_event, m_store, m_verbose) ,"");
     m_pvLocation = HelperFunctions::getPrimaryVertexLocation( vertices );
   }
 
@@ -582,6 +612,9 @@ EL::StatusCode JetSelector :: histFinalize ()
 
 int JetSelector :: PassCuts( const xAOD::Jet* jet ) {
 
+  // fill cutflow bin 'all' before any cut
+  m_jet_cutflowHist_1->Fill( m_jet_cutflow_all, 1 );
+
   // clean jets
   static SG::AuxElement::Accessor< char > isCleanAcc("cleanJet");
   if ( m_cleanJets ) {
@@ -589,14 +622,18 @@ int JetSelector :: PassCuts( const xAOD::Jet* jet ) {
       if ( !isCleanAcc( *jet ) ) { return 0; }
     }
   }
+  m_jet_cutflowHist_1->Fill( m_jet_cutflow_cleaning_cut, 1 );        
 
   // pT
   if ( m_pT_max != 1e8 ) {
     if ( jet->pt() > m_pT_max ) { return 0; }
   }
+  m_jet_cutflowHist_1->Fill( m_jet_cutflow_ptmax_cut, 1 );        
+  
   if ( m_pT_min != 1e8 ) {
     if ( jet->pt() < m_pT_min ) { return 0; }
   }
+  m_jet_cutflowHist_1->Fill( m_jet_cutflow_ptmin_cut, 1 );        
 
   // eta
   if ( m_eta_max != 1e8 ) {
@@ -605,13 +642,14 @@ int JetSelector :: PassCuts( const xAOD::Jet* jet ) {
   if ( m_eta_min != 1e8 ) {
     if ( fabs(jet->eta()) < m_eta_min ) { return 0; }
   }
+  m_jet_cutflowHist_1->Fill( m_jet_cutflow_eta_cut, 1 );        
 
   // detEta
   if ( m_detEta_max != 1e8 ) {
-    if ( ( jet->getAttribute<xAOD::JetFourMom_t>("JetConstitScaleMomentum") ).eta() > m_detEta_max ) { return 0; }
+    if ( ( jet->getAttribute<xAOD::JetFourMom_t>(m_jetScaleType.c_str()) ).eta() > m_detEta_max ) { return 0; }
   }
   if ( m_detEta_min != 1e8 ) {
-    if( ( jet->getAttribute<xAOD::JetFourMom_t>("JetConstitScaleMomentum") ).eta() < m_detEta_min ) { return 0; }
+    if( ( jet->getAttribute<xAOD::JetFourMom_t>(m_jetScaleType.c_str()) ).eta() < m_detEta_min ) { return 0; }
   }
 
   // mass
@@ -633,8 +671,8 @@ int JetSelector :: PassCuts( const xAOD::Jet* jet ) {
   // JVF pileup cut
   if ( m_doJVF ){
     if ( jet->pt() < m_pt_max_JVF ) {
-      xAOD::JetFourMom_t jetConstitScaleP4 = jet->getAttribute< xAOD::JetFourMom_t >( "JetConstitScaleMomentum" );
-      if ( fabs(jetConstitScaleP4.eta()) < m_eta_max_JVF ){
+      xAOD::JetFourMom_t jetScaleP4 = jet->getAttribute< xAOD::JetFourMom_t >( m_jetScaleType.c_str() );
+      if ( fabs(jetScaleP4.eta()) < m_eta_max_JVF ){
         if ( jet->getAttribute< std::vector<float> >( "JVF" ).at( m_pvLocation ) < m_JVFCut ) {
           return 0;
         }
@@ -643,17 +681,25 @@ int JetSelector :: PassCuts( const xAOD::Jet* jet ) {
   } // m_doJVF
 
   // JVT pileup cut
-  if ( m_doJVT ){
-    //std::cout << "pt/eta/JVT : " << jet->pt() << "/" << jet->eta() << "/" << jet->getAttribute< float >( "Jvt" ) << std::endl;
+  //
+  if ( m_doJVT ) {
+
+    if ( m_debug ) {
+      if ( jet->getAttribute< float >( "Jvt" ) < m_JVTCut ) { Info("passCuts()", " pt/eta = %2f/%2f ", jet->pt() , jet->eta() ); }
+    }
+
     if ( jet->pt() < m_pt_max_JVT ) {
-      xAOD::JetFourMom_t jetConstitScaleP4 = jet->getAttribute< xAOD::JetFourMom_t >( "JetConstitScaleMomentum" );
-      if ( fabs(jetConstitScaleP4.eta()) < m_eta_max_JVT ){
+      xAOD::JetFourMom_t jetScaleP4 = jet->getAttribute< xAOD::JetFourMom_t >( m_jetScaleType.c_str() );
+      if ( fabs(jetScaleP4.eta()) < m_eta_max_JVT ){
+        if ( m_debug ) { Info("passCuts()", " JVT = %2f ", jet->getAttribute< float >( "Jvt" ) ); }
         if ( jet->getAttribute< float >( "Jvt" ) < m_JVTCut ) {
+	  if ( m_debug ) { Info("passCuts()", " upper JVTCut is %2f - cutting this jet!!", m_JVTCut ); }
           return 0;
         }
       }
     }
   } // m_doJVT
+  m_jet_cutflowHist_1->Fill( m_jet_cutflow_jvt_cut, 1 );        
 
   //
   //  BTagging
@@ -679,14 +725,15 @@ int JetSelector :: PassCuts( const xAOD::Jet* jet ) {
       if ( m_doBTagCut && (discriminant < m_btagCut) ) {
 	return 0;
       }
+      m_jet_cutflowHist_1->Fill( m_jet_cutflow_btag_cut, 1 );        
 
       //
       // Decorate the Jets
       //
-      jet->auxdecor<char>("BTagVeryLoose") = static_cast<char>( myBTag->MV1_discriminant() > m_btag_veryloose_cut );
-      jet->auxdecor<char>("BTagLoose")     = static_cast<char>( myBTag->MV1_discriminant() > m_btag_loose_cut     );
-      jet->auxdecor<char>("BTagMedium")    = static_cast<char>( myBTag->MV1_discriminant() > m_btag_medium_cut    );
-      jet->auxdecor<char>("BTagTight")     = static_cast<char>( myBTag->MV1_discriminant() > m_btag_tight_cut     );
+      jet->auxdecor<char>("BTagVeryLoose") = static_cast<char>( discriminant > m_btag_veryloose_cut );
+      jet->auxdecor<char>("BTagLoose")     = static_cast<char>( discriminant > m_btag_loose_cut     );
+      jet->auxdecor<char>("BTagMedium")    = static_cast<char>( discriminant > m_btag_medium_cut    );
+      jet->auxdecor<char>("BTagTight")     = static_cast<char>( discriminant > m_btag_tight_cut     );
 
     }
   }

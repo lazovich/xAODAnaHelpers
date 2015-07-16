@@ -1,4 +1,4 @@
-/***************************************************
+/********************************************************************************
  * HelpTreeBase:
  *
  * This class is meant to help the user write out a tree.
@@ -8,7 +8,7 @@
  * Gabriel Facini ( gabriel.facini@cern.ch ), Marco Milesi (marco.milesi@cern.ch)
  *
  *
- ***************************************************/
+ ********************************************************************************/
 
 // Dear emacs, this is -*-c++-*-
 #ifndef xAODAnaHelpers_HelpTreeBase_H
@@ -26,6 +26,7 @@
 
 #include "xAODAnaHelpers/HelperClasses.h"
 #include "xAODRootAccess/TEvent.h"
+#include "xAODRootAccess/TStore.h"
 
 #include "InDetTrackSelectionTool/InDetTrackSelectionTool.h"
 
@@ -57,8 +58,9 @@ public:
   void AddFatJets     (const std::string detailStr = "");
   void AddTaus        (const std::string detailStr = "");
   void AddMET         (const std::string detailStr = "");
- 
+
   xAOD::TEvent* m_event;
+  xAOD::TStore* m_store; 
 
   // control which branches are filled
   HelperClasses::EventInfoSwitch*      m_eventInfoSwitch;
@@ -70,14 +72,14 @@ public:
   HelperClasses::JetInfoSwitch*        m_fatJetInfoSwitch;
   HelperClasses::TauInfoSwitch*        m_tauInfoSwitch;
   HelperClasses::METInfoSwitch*        m_metInfoSwitch;
-  
+
   InDet::InDetTrackSelectionTool * m_trkSelTool;
 
   std::string                  m_triggerSelection;
   TrigConf::xAODConfigTool*    m_trigConfTool;
   Trig::TrigDecisionTool*      m_trigDecTool;
 
-  void FillEvent( const xAOD::EventInfo* eventInfo, xAOD::TEvent* event = 0 );
+  void FillEvent( const xAOD::EventInfo* eventInfo, xAOD::TEvent* event );
   void FillTrigger( const xAOD::EventInfo* eventInfo );
   void FillJetTrigger();
   void FillMuons( const xAOD::MuonContainer* muons, const xAOD::Vertex* primaryVertex );
@@ -94,6 +96,7 @@ public:
   void ClearMuons();
   void ClearElectrons();
   void ClearJets();
+  void ClearFatJets();
   void ClearTaus();
   void ClearMET();
 
@@ -123,29 +126,38 @@ public:
     if(m_debug) Info("AddJetsUser","Empty function called from HelpTreeBase %s",detailStr.c_str());
     return;
   };
+  virtual void AddFatJetsUser(const std::string detailStr = "")       {
+    if(m_debug) Info("AddFatJetsUser","Empty function called from HelpTreeBase %s",detailStr.c_str());
+    return;
+  };
   virtual void AddTausUser(const std::string detailStr = "")       {
     if(m_debug) Info("AddTausUser","Empty function called from HelpTreeBase %s",detailStr.c_str());
     return;
   };
-
+  virtual void AddMETUser(const std::string detailStr = "")       {
+    if(m_debug) Info("AddMETUser","Empty function called from HelpTreeBase %s",detailStr.c_str());
+    return;
+  };
+  
   virtual void ClearEventUser()     { return; };
   virtual void ClearTriggerUser()   { return; };
   virtual void ClearMuonsUser()     { return; };
   virtual void ClearElectronsUser() { return; };
   virtual void ClearJetsUser() 	    { return; };
+  virtual void ClearFatJetsUser()   { return; };
   virtual void ClearTausUser() 	    { return; };
+  virtual void ClearMETUser()       { return; };
 
+  virtual void FillEventUser( const xAOD::EventInfo*  )        { return; };
+  virtual void FillMuonsUser( const xAOD::Muon*  )             { return; };
+  virtual void FillElectronsUser( const xAOD::Electron*  )     { return; };
+  virtual void FillJetsUser( const xAOD::Jet*  )               { return; };
+  virtual void FillFatJetsUser( const xAOD::Jet*  )            { return; };
+  virtual void FillTausUser( const xAOD::TauJet*  )            { return; };
+  virtual void FillMETUser( const xAOD::MissingETContainer*  ) { return; };
+  virtual void FillTriggerUser( const xAOD::EventInfo*  )      { return; };
+  virtual void FillJetTriggerUser()                            { return; };
 
-  virtual void FillEventUser( const xAOD::EventInfo* /*eventInfo*/ )        { return; };
-  virtual void FillMuonsUser( const xAOD::Muon* /*muon*/ )                  { return; };
-  virtual void FillElectronsUser( const xAOD::Electron* /*electron*/ )      { return; };
-  virtual void FillJetsUser( const xAOD::Jet* /*jet*/ )                     { return; };
-  virtual void FillFatJetsUser( const xAOD::Jet* /*fatJet*/ )               { return; };
-  virtual void FillTausUser( const xAOD::TauJet* /*tau*/ )                  { return; };
-  
-  virtual void FillTriggerUser()                                            { return; };
-  virtual void FillJetTriggerUser()                                         { return; };
-  
 protected:
 
   TTree* m_tree;
@@ -161,6 +173,7 @@ protected:
   int m_mcEventNumber;
   int m_mcChannelNumber;
   float m_mcEventWeight;
+  float m_weight_pileup;
   // event pileup
   int m_npv;
   float m_actualMu;
@@ -188,7 +201,7 @@ protected:
   std::vector<float> m_caloCluster_eta;
   std::vector<float> m_caloCluster_phi;
   std::vector<float> m_caloCluster_e;
-  
+
   // trigger
   int m_passAny;
   int m_passL1;
@@ -196,9 +209,12 @@ protected:
   unsigned int m_masterKey;
   unsigned int m_L1PSKey;
   unsigned int m_HLTPSKey;
+  std::vector<std::string>  m_elTrigForMatching;   /* each event can have a list of electron trigger chains to which each electron could be matched.
+  						   / This list is created when configuring ElectronSelector.cxx, where the electron trigger matching is actually performed
+						   */
 
   std::vector<std::string> m_passTriggers;
-  
+
   // jet trigger
 
   // jets
@@ -227,10 +243,10 @@ protected:
   std::vector<float> m_jet_LeadingClusterSecondLambda;
   std::vector<float> m_jet_LeadingClusterCenterLambda;
   std::vector<float> m_jet_LeadingClusterSecondR;
-  std::vector<int> m_jet_clean_VeryLooseBad;
-  std::vector<int> m_jet_clean_LooseBad;
-  std::vector<int> m_jet_clean_MediumBad;
-  std::vector<int> m_jet_clean_TightBad;
+  std::vector<int> m_jet_clean_passLooseBad;
+  std::vector<int> m_jet_clean_passLooseBadUgly;
+  std::vector<int> m_jet_clean_passTightBad;
+  std::vector<int> m_jet_clean_passTightBadUgly;
 
   // energy
   std::vector<float> m_jet_HECf;
@@ -241,6 +257,14 @@ protected:
   std::vector<float> m_jet_lowEtFrac;
   std::vector<float> m_jet_muonSegCount;
   std::vector<float> m_jet_width;
+
+  // scales
+  std::vector<float> m_jet_emPt;
+  std::vector<float> m_jet_pileupPt;
+  std::vector<float> m_jet_originConstitPt;
+  std::vector<float> m_jet_etaJESPt;
+  std::vector<float> m_jet_gscPt;
+  std::vector<float> m_jet_insituPt;
 
   // layer
   std::vector< std::vector<float> > m_jet_ePerSamp;
@@ -353,6 +377,19 @@ protected:
   std::vector<int>   m_jet_truthCount_TausFinal;
   std::vector<float> m_jet_truthPt_TausFinal;
 
+  // fat jets
+  int m_nfatjet;
+
+  // kinematics
+  std::vector<float> m_fatjet_pt;
+  std::vector<float> m_fatjet_eta;
+  std::vector<float> m_fatjet_phi;
+  std::vector<float> m_fatjet_m;
+  std::vector<float> m_fatjet_E;
+
+  // substructure
+  std::vector<float> m_fatjet_tau32_wta;
+
   // muons
   int m_nmuon;
 
@@ -362,8 +399,20 @@ protected:
   std::vector<float> m_muon_phi;
   std::vector<float> m_muon_m;
 
+  // trigger
+  std::vector<int>  m_muon_isTrigMatched;
+
   // isolation
   std::vector<int>   m_muon_isIsolated;
+  std::vector<float> m_muon_ptcone20;
+  std::vector<float> m_muon_ptcone30;
+  std::vector<float> m_muon_ptcone40;
+  std::vector<float> m_muon_ptvarcone20;
+  std::vector<float> m_muon_ptvarcone30;
+  std::vector<float> m_muon_ptvarcone40;  
+  std::vector<float> m_muon_topoetcone20;
+  std::vector<float> m_muon_topoetcone30;
+  std::vector<float> m_muon_topoetcone40;  
 
   // quality
   std::vector<int>   m_muon_isVeryLoose;
@@ -401,16 +450,29 @@ protected:
   std::vector<float> m_el_phi;
   std::vector<float> m_el_eta;
   std::vector<float> m_el_m;
-
+  
+  // trigger
+  std::vector<int> m_el_isTrigMatchedToChain;
+  std::vector<std::string> m_el_listTrigChains;
+  
   // isolation
   std::vector<int>   m_el_isIsolated;
-
+  std::vector<float> m_el_etcone20;
+  std::vector<float> m_el_ptcone20;
+  std::vector<float> m_el_ptcone30;
+  std::vector<float> m_el_ptcone40;
+  std::vector<float> m_el_ptvarcone20;
+  std::vector<float> m_el_ptvarcone30;
+  std::vector<float> m_el_ptvarcone40;  
+  std::vector<float> m_el_topoetcone20;
+  std::vector<float> m_el_topoetcone30;
+  std::vector<float> m_el_topoetcone40;  
+  
   // PID
   std::vector<int>   m_el_LHVeryLoose;
   std::vector<int>   m_el_LHLoose;
   std::vector<int>   m_el_LHMedium;
   std::vector<int>   m_el_LHTight;
-  std::vector<int>   m_el_LHVeryTight;
   std::vector<int>   m_el_IsEMLoose;
   std::vector<int>   m_el_IsEMMedium;
   std::vector<int>   m_el_IsEMTight;
@@ -447,9 +509,14 @@ protected:
   std::vector<float> m_tau_m;
   std::vector<int>   m_tau_ntrk;
   std::vector<float> m_tau_charge;
-  
+
   // met
-  float m_metFinal;     float m_metFinalPhi;
+  float m_metFinal;
+  float m_metFinalPx;
+  float m_metFinalPy;
+  float m_metFinalPhi; 
+  float m_metFinalSumEt;
+   
   float m_metEle;       float m_metElePhi;
   float m_metGamma;     float m_metGammaPhi;
   float m_metTau;       float m_metTauPhi;
