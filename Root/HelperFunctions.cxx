@@ -230,6 +230,10 @@ bool HelperFunctions::sort_pt(xAOD::IParticle* partA, xAOD::IParticle* partB){
   return partA->pt() > partB->pt();
 }
 
+bool HelperFunctions::constit_sort_pt(xAOD::JetConstituent partA, xAOD::JetConstituent partB){
+  return (partA)->pt() > (partB)->pt();
+}
+
 // Get the subset of systematics to consider
 // can also return full set if systName = "All"
 std::vector< CP::SystematicSet > HelperFunctions::getListofSystematics(const CP::SystematicSet recSysts,

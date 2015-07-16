@@ -3,6 +3,8 @@
 
 #include "xAODAnaHelpers/HistogramManager.h"
 #include "xAODAnaHelpers/HelperClasses.h"
+#include "xAODAnaHelpers/HelperFunctions.h"
+
 #include <xAODJet/JetContainer.h>
 
 class JetHists : public HistogramManager
@@ -33,11 +35,15 @@ class JetHists : public HistogramManager
     TH1F* m_jetM;                   //!
     TH1F* m_jetE;                   //!
     TH1F* m_jetRapidity;            //!
+    TH1F* m_nJet;                   //!
 
     // kinematic
     TH1F* m_jetPx;                  //!
     TH1F* m_jetPy;                  //!
     TH1F* m_jetPz;                  //!
+
+    TH1F* m_nConstituents; //!
+    TH1F* m_leadConstitPtFrac; //!
 
     //NLeadingJets
     std::vector< TH1F* > m_NjetsPt;       //!
@@ -129,7 +135,7 @@ class JetHists : public HistogramManager
     TH1F* m_truthPt_TausFinal   ; //!
 
     // Flavor Tag
-    TH1F* m_MV1   ; //!
+    TH1F* m_MV2   ; //!
     TH1F* m_SV1_plus_IP3D   ; //!
     TH1F* m_SV0             ; //!
     TH1F* m_SV1             ; //!

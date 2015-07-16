@@ -38,6 +38,8 @@ namespace HelperFunctions {
   int getPrimaryVertexLocation(const xAOD::VertexContainer* vertexContainer);
   std::string replaceString(std::string subjet, const std::string& search, const std::string& replace);
 
+  bool constit_sort_pt(xAOD::JetConstituent partA, xAOD::JetConstituent partB);
+
 
   /*@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*\
   |                                                                            |

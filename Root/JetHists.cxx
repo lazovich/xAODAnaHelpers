@@ -18,13 +18,19 @@ JetHists :: ~JetHists () {
 StatusCode JetHists::initialize() {
 
   // These plots are always made
-  m_jetPt          = book(m_name, "jetPt",  "jet p_{T} [GeV]", 120, 0, 3000.);
+  m_jetPt          = book(m_name, "jetPt",  "jet p_{T} [GeV]", 150, 0., 3000.);
   m_jetEta         = book(m_name, "jetEta", "jet #eta",         80, -4, 4);
   m_jetPhi         = book(m_name, "jetPhi", "jet Phi",120, -TMath::Pi(), TMath::Pi() );
   m_jetM           = book(m_name, "jetMass", "jet Mass [GeV]",120, 0, 400);
   m_jetE           = book(m_name, "jetEnergy", "jet Energy [GeV]",120, 0, 4000.);
   m_jetRapidity    = book(m_name, "jetRapidity", "jet Rapidity",120, -10, 10);
+  m_nJet           = book(m_name, "nJet", "Number of jets", 10, -0.5, 9.5);
 
+  if(m_infoSwitch -> m_constituent){
+    m_nConstituents   = book(m_name, "nConstituents", "Number of constituents", 50, -0.5, 49.5);
+    m_leadConstitPtFrac = book(m_name, "leadConstitPtFrac", "p_{T}^{lead constit.}/p_{T}^{jet}", 50, 0.0, 1.0);
+  }
+  
   if(m_debug) Info("JetHists::initialize()", m_name.c_str());
   // details of the jet kinematics
   if( m_infoSwitch->m_kinematic ) {
@@ -196,7 +202,7 @@ StatusCode JetHists::initialize() {
   if( m_infoSwitch->m_flavTag ) {
     if(m_debug) Info("JetHists::initialize()", "adding btagging plots");
 
-    m_MV1             = book(m_name, "MV1",    "MV1" ,      100,    -0.1,   1.1);
+    m_MV2             = book(m_name, "MV2c20",    "MV2c20" ,      100,    -1.1,   1.1);
     m_SV1_plus_IP3D   = book(m_name, "SV1_plus_IP3D",    "SV1_plus_IP3D" ,      100,    -0.1,   1.1);
     m_SV0             = book(m_name, "SV0",    "SV0" ,      100,    -20,  200);
     m_SV1             = book(m_name, "SV1",    "SV1" ,      100,    -5,   15);
@@ -214,6 +220,8 @@ StatusCode JetHists::execute( const xAOD::JetContainer* jets, float eventWeight,
   for( auto jet_itr : *jets ) {
     RETURN_CHECK("JetHists::execute()", this->execute( jet_itr, eventWeight, pvLoc ), "");
   }
+
+  m_nJet->Fill(jets->size());
 
   if( m_infoSwitch->m_numLeadingJets > 0){
 
@@ -240,6 +248,18 @@ StatusCode JetHists::execute( const xAOD::Jet* jet, float eventWeight, int pvLoc
   m_jetM->          Fill( jet->m()/1e3,     eventWeight );
   m_jetE->          Fill( jet->e()/1e3,     eventWeight );
   m_jetRapidity->   Fill( jet->rapidity(),  eventWeight );
+
+  if( m_infoSwitch->m_constituent ){
+    m_nConstituents-> Fill( jet->numConstituents(), eventWeight );
+
+    xAOD::JetConstituentVector c = jet->getConstituents();
+    if(c.isValid()){
+      std::vector<xAOD::JetConstituent> constit = c.asSTLVector();
+      std::sort(constit.begin(), constit.end(), HelperFunctions::constit_sort_pt);
+      xAOD::JetConstituent lead_constit = constit[0];
+      m_leadConstitPtFrac->Fill(lead_constit->pt()/jet->pt(), eventWeight);
+    }
+  }
 
   // kinematic
   if( m_infoSwitch->m_kinematic ) {
@@ -620,14 +640,17 @@ StatusCode JetHists::execute( const xAOD::Jet* jet, float eventWeight, int pvLoc
   if( m_infoSwitch->m_flavTag ) {
 
     const xAOD::BTagging *btag_info = jet->btagging();
-    m_MV1 ->  Fill( btag_info->MV1_discriminant() , eventWeight );
+    double discriminant = -99;
+    btag_info->MVx_discriminant("MV2c20", discriminant);
+      m_MV2 -> Fill( discriminant, eventWeight );
+    //m_MV1 ->  Fill( btag_info->MV1_discriminant() , eventWeight );
     m_SV1_plus_IP3D ->  Fill( btag_info->MV1_discriminant() , eventWeight );
     m_SV0 ->  Fill( btag_info->SV0_significance3D() , eventWeight );
     m_SV1 ->  Fill( btag_info->SV1_loglikelihoodratio() , eventWeight );
     m_IP2D ->  Fill( btag_info->IP2D_loglikelihoodratio() , eventWeight );
     m_IP3D ->  Fill( btag_info->IP3D_loglikelihoodratio() , eventWeight );
     m_JetFitter ->  Fill( btag_info->JetFitter_loglikelihoodratio() , eventWeight );
-    m_JetFitterCombNN ->  Fill( btag_info->JetFitterCombNN_loglikelihoodratio() , eventWeight );
+    //m_JetFitterCombNN ->  Fill( btag_info->JetFitterCombNN_loglikelihoodratio() , eventWeight );
 
   }
 
